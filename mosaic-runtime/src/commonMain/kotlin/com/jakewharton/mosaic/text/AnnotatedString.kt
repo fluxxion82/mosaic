@@ -422,6 +422,14 @@ public inline fun <R : Any> Builder.withStyle(
 }
 
 /**
+ * Pushes a [SpanStyle] with [url] as its [link][SpanStyle.link], executes [block], and pops it.
+ */
+public inline fun <R : Any> Builder.withLink(
+	url: String,
+	block: Builder.() -> R,
+): R = withStyle(SpanStyle(link = url), block)
+
+/**
  * Create an AnnotatedString with a [spanStyle] that will apply to the whole text.
  *
  * @param spanStyle [SpanStyle] to be applied to whole text

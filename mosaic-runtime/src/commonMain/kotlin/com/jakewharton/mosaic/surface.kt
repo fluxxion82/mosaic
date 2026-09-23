@@ -67,6 +67,9 @@ internal class TextSurface(
 			val pixel = cells[columnIndex]
 
 			if (ansiLevel != AnsiLevel.NONE) {
+				if (pixel.link != lastPixel.link) {
+					appendable.appendHyperlink(pixel.link)
+				}
 				if (pixel.foreground != lastPixel.foreground) {
 					attributes.addColor(
 						pixel.foreground,
@@ -138,6 +141,9 @@ internal class TextSurface(
 			lastPixel = pixel
 		}
 
+		if (ansiLevel != AnsiLevel.NONE && lastPixel.link != null) {
+			appendable.appendHyperlink(null)
+		}
 		if (
 			ansiLevel != AnsiLevel.NONE &&
 			(
@@ -151,6 +157,26 @@ internal class TextSurface(
 			appendable.append(ansiReset)
 			appendable.append(ansiClosingCharacter)
 		}
+	}
+
+	/** Open an OSC 8 hyperlink to [url], or close the current one when null. */
+	private fun Appendable.appendHyperlink(url: String?) {
+		append("\u001B]8;;")
+		if (url != null) {
+			// OSC 8 URIs are limited to printable ASCII. Percent-encode everything else as UTF-8,
+			// which also keeps control characters from terminating the sequence early.
+			for (byte in url.encodeToByteArray()) {
+				val code = byte.toInt() and 0xFF
+				if (code in 0x21..0x7E) {
+					append(code.toChar())
+				} else {
+					append('%')
+					append(HexDigits[code shr 4])
+					append(HexDigits[code and 0xF])
+				}
+			}
+		}
+		append("\u001B\\")
 	}
 
 	private fun MutableList<String>.addColor(
@@ -210,6 +236,7 @@ internal class TextPixel(var codePoint: Int) {
 	var textStyle: TextStyle = TextStyle.Empty
 	var underlineStyle: UnderlineStyle = UnderlineStyle.Unspecified
 	var underlineColor: Color = Color.Unspecified
+	var link: String? = null
 
 	fun isEmpty(): Boolean {
 		return codePoint == SpaceCharCodePoint &&
@@ -217,7 +244,8 @@ internal class TextPixel(var codePoint: Int) {
 			foreground.isUnspecifiedColor &&
 			textStyle.isEmptyTextStyle &&
 			underlineStyle.isUnspecifiedUnderlineStyle &&
-			underlineColor.isUnspecifiedColor
+			underlineColor.isUnspecifiedColor &&
+			link == null
 	}
 
 	override fun toString() = buildString {
@@ -236,3 +264,5 @@ internal class TextPixel(var codePoint: Int) {
 		append(')')
 	}
 }
+
+private const val HexDigits = "0123456789ABCDEF"

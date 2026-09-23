@@ -280,6 +280,9 @@ internal open class TextCanvasDrawScope(
 			character.updateTextPixel(text.codePointAt(pixelIndex), foreground, background, textStyle, underlineStyle, underlineColor)
 			spanStylesProvider?.invoke(pixelIndex, pixelEnd)?.forEach {
 				character.updateTextPixel(UnspecifiedCodePoint, it.color, it.background, it.textStyle, it.underlineStyle, it.underlineColor)
+				if (it.link != null) {
+					character.link = it.link
+				}
 			}
 
 			pixelIndex = pixelEnd
