@@ -2,12 +2,14 @@ package com.jakewharton.mosaic
 
 import com.jakewharton.mosaic.layout.KeyEvent
 import com.jakewharton.mosaic.terminal.KeyboardEvent
+import de.cketti.codepoints.appendCodePoint
 
 internal fun KeyboardEvent.toKeyEventOrNull(): KeyEvent? {
 	if (eventType != KeyboardEvent.EventTypePress) {
 		return null
 	}
 
+	// Unmapped private-use codepoints (Kitty functional keys) and lone surrogates are ignored.
 	return KeyEvent(
 		key = when (val codepoint = codepoint) {
 			9 -> "Tab"
@@ -26,7 +28,9 @@ internal fun KeyboardEvent.toKeyEventOrNull(): KeyEvent? {
 			57356 -> "Home"
 			57357 -> "End"
 			in 57364..57398 -> "F" + (codepoint - 57363)
-			else -> throw UnsupportedOperationException(toString())
+			in 0xE000..0xF8FF, in 0xD800..0xDFFF -> return null
+			in 0xA0..0x10FFFF -> buildString { appendCodePoint(codepoint) }
+			else -> return null
 		},
 		alt = alt,
 		ctrl = ctrl,
