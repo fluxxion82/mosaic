@@ -382,6 +382,25 @@ private const val HalfPi = (PI * 0.5).toFloat()
 
 private val OurPercentCache: FloatArray = FloatArray(91)
 
-internal expect inline fun toRadians(value: Double): Double
+internal inline fun toRadians(value: Double): Double {
+	return value * (PI / 180.0)
+}
 
-internal expect inline fun binarySearch(array: FloatArray, position: Float): Int
+/**
+ * Search a sorted [array] for [position] with the semantics of `java.util.Arrays.binarySearch`:
+ * the index if found, otherwise `-(insertionPoint) - 1`.
+ */
+internal fun binarySearch(array: FloatArray, position: Float): Int {
+	var low = 0
+	var high = array.size - 1
+	while (low <= high) {
+		val mid = (low + high) ushr 1
+		val comparison = array[mid].compareTo(position)
+		when {
+			comparison < 0 -> low = mid + 1
+			comparison > 0 -> high = mid - 1
+			else -> return mid
+		}
+	}
+	return -(low + 1)
+}
