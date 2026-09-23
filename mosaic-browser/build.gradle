@@ -1,0 +1,27 @@
+apply plugin: 'org.jetbrains.kotlin.multiplatform'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+
+kotlin {
+	explicitApi()
+
+	wasmJs {
+		// Consumers bundle for the browser. Unit tests cover the DOM-free pieces and run on Node.
+		nodejs()
+	}
+
+	sourceSets {
+		wasmJsMain {
+			dependencies {
+				api projects.mosaicRuntime
+				api projects.mosaicHtml
+				implementation libs.kotlinx.browser
+			}
+		}
+		wasmJsTest {
+			dependencies {
+				implementation libs.kotlin.test
+				implementation libs.assertk
+			}
+		}
+	}
+}

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Mosaic Web</title>
+	<style>
+		:root {
+			--mosaic-fg: #1f2328;
+			--mosaic-bg: #ffffff;
+			color-scheme: light dark;
+		}
+		@media (prefers-color-scheme: dark) {
+			:root {
+				--mosaic-fg: #d4d4d4;
+				--mosaic-bg: #0d1117;
+			}
+		}
+		html, body {
+			margin: 0;
+			height: 100%;
+			background: var(--mosaic-bg);
+			color: var(--mosaic-fg);
+		}
+		#terminal {
+			box-sizing: border-box;
+			height: 100%;
+			padding: 12px 16px;
+			overflow: auto;
+			font: 15px/1.25 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+			white-space: pre;
+			outline: none;
+		}
+		#terminal a {
+			color: inherit;
+			text-decoration: underline dotted;
+		}
+		#terminal a:hover {
+			text-decoration-style: solid;
+		}
+		#terminal a:focus-visible {
+			outline: 1px solid currentColor;
+		}
+	</style>
+</head>
+<body>
+	<div id="terminal"></div>
+	<script>
+		// Hidden tabs pause requestAnimationFrame. ?headless keeps frames running for automated checks.
+		if (new URLSearchParams(location.search).has('headless')) {
+			window.requestAnimationFrame = cb => setTimeout(() => cb(performance.now()), 16);
+			window.cancelAnimationFrame = id => clearTimeout(id);
+		}
+	</script>
+	<script src="web.js"></script>
+</body>
+</html>

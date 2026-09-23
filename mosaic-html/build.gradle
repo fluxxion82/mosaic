@@ -1,0 +1,22 @@
+apply plugin: 'org.jetbrains.kotlin.multiplatform'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+apply from: "$rootDir/addAllTargets.gradle"
+apply from: "$rootDir/addWasmTarget.gradle"
+
+kotlin {
+	explicitApi()
+
+	sourceSets {
+		commonMain {
+			dependencies {
+				api projects.mosaicRuntime
+			}
+		}
+		commonTest {
+			dependencies {
+				implementation libs.kotlin.test
+				implementation libs.assertk
+			}
+		}
+	}
+}
