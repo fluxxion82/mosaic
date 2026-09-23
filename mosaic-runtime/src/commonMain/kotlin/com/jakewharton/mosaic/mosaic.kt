@@ -20,6 +20,7 @@ import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.jakewharton.mosaic.layout.KeyEvent
 import com.jakewharton.mosaic.layout.MosaicNode
+import com.jakewharton.mosaic.terminal.Event
 import com.jakewharton.mosaic.terminal.KeyboardEvent
 import com.jakewharton.mosaic.terminal.Terminal
 import com.jakewharton.mosaic.ui.BoxMeasurePolicy
@@ -35,17 +36,20 @@ import kotlinx.coroutines.CoroutineStart.UNDISPATCHED
 import kotlinx.coroutines.Dispatchers.Unconfined
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.Channel.Factory.CONFLATED
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 
 internal suspend fun runMosaicComposition(
 	terminal: Terminal,
 	rendering: Rendering,
 	content: @Composable () -> Unit,
 ) {
-	val clock = BroadcastFrameClock()
+	val frameRequests = Channel<Unit>(CONFLATED)
+	val clock = BroadcastFrameClock { frameRequests.trySend(Unit) }
 	val mosaicComposition = MosaicComposition(
 		coroutineContext = coroutineContext + clock,
 		onDraw = { rootNode ->
@@ -58,6 +62,8 @@ internal suspend fun runMosaicComposition(
 
 	mosaicComposition.scope.launch {
 		while (true) {
+			// Wait until a frame is requested so an idle UI does not keep the process busy.
+			frameRequests.receive()
 			clock.sendFrame(nanoTime())
 
 			// "1000 FPS should be enough for anybody"
@@ -82,6 +88,14 @@ public interface Mosaic {
 	public fun cancel()
 }
 
+/**
+ * Create a [Mosaic] composition which draws when [onDraw] is invoked.
+ *
+ * [coroutineContext] must contain a [MonotonicFrameClock]. Frames are only awaited on it while
+ * there is work to do (recomposition, animation, invalidated layout or draw, or terminal input), so
+ * an idle composition does not consume frames. A clock driven by hand, such as a
+ * [BroadcastFrameClock], should use its `onNewAwaiters` callback to learn when to send one.
+ */
 public fun Mosaic(
 	coroutineContext: CoroutineContext,
 	onDraw: (Mosaic) -> Unit,
@@ -99,7 +113,10 @@ internal class MosaicComposition(
 	private val externalClock = checkNotNull(coroutineContext[MonotonicFrameClock]) {
 		"Mosaic requires an external MonotonicFrameClock in its coroutine context"
 	}
-	private val internalClock = BroadcastFrameClock()
+
+	/** Signaled whenever there may be work for the frame listener. Conflated, so wakes coalesce. */
+	private val wake = Channel<Unit>(CONFLATED)
+	private val internalClock = BroadcastFrameClock { wake.trySend(Unit) }
 
 	private val job = Job(coroutineContext[Job])
 	private val composeContext = coroutineContext + job + internalClock
@@ -153,9 +170,17 @@ internal class MosaicComposition(
 
 	@Volatile
 	private var needLayout = false
+		set(value) {
+			field = value
+			if (value) wake.trySend(Unit)
+		}
 
 	@Volatile
 	private var needDraw = false
+		set(value) {
+			field = value
+			if (value) wake.trySend(Unit)
+		}
 
 	init {
 		GlobalSnapshotManager().ensureStarted(scope)
@@ -255,12 +280,36 @@ internal class MosaicComposition(
 	private fun startFrameListener() {
 		scope.launch(start = UNDISPATCHED) {
 			val ctrlC = KeyEvent("c", ctrl = true)
+			var pendingEvent: Event? = null
+			var eventsClosed = false
 
 			do {
+				// Only request a frame when there is work, so an idle composition costs nothing.
+				if (pendingEvent == null && !eventsClosed) {
+					val result = terminal.events.tryReceive()
+					// Only key events are handled, so others should not cost a frame.
+					pendingEvent = result.getOrNull() as? KeyboardEvent
+					eventsClosed = result.isClosed
+				}
+				if (pendingEvent == null && !needLayout && !needDraw && !internalClock.hasAwaiters) {
+					select {
+						wake.onReceive {}
+						if (!eventsClosed) {
+							terminal.events.onReceiveCatching { result ->
+								pendingEvent = result.getOrNull() as? KeyboardEvent
+								eventsClosed = result.isClosed
+							}
+						}
+					}
+					continue
+				}
+
 				externalClock.withFrameNanos { nanos ->
 					// Drain any pending key events before triggering the frame.
 					while (true) {
-						val event = terminal.events.tryReceive().getOrNull() ?: break
+						val event = pendingEvent?.also { pendingEvent = null }
+							?: terminal.events.tryReceive().getOrNull()
+							?: break
 						if (event !is KeyboardEvent) continue
 						val keyEvent = event.toKeyEventOrNull() ?: continue
 						val keyHandled = rootNode.sendKeyEvent(keyEvent)
