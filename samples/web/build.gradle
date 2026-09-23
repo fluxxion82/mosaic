@@ -1,0 +1,50 @@
+apply plugin: 'org.jetbrains.kotlin.multiplatform'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+
+kotlin {
+	jvm()
+
+	wasmJs {
+		outputModuleName = 'web'
+		browser {
+			commonWebpackConfig {
+				outputFileName = 'web.js'
+			}
+		}
+		binaries.executable()
+	}
+
+	sourceSets {
+		commonMain {
+			dependencies {
+				implementation projects.mosaicRuntime
+				implementation projects.mosaicAnimation
+			}
+		}
+		jvmMain {
+			dependencies {
+				implementation projects.mosaicHtml
+			}
+		}
+		wasmJsMain {
+			dependencies {
+				implementation projects.mosaicBrowser
+				implementation libs.kotlinx.browser
+			}
+		}
+	}
+}
+
+// Write the app's first frame into the distribution's index.html for no-JS clients and first paint.
+def prerender = tasks.register('prerender', JavaExec) {
+	def jvmCompilation = kotlin.jvm().compilations.main
+	classpath = files(jvmCompilation.output.allOutputs, jvmCompilation.runtimeDependencyFiles)
+	mainClass = 'example.Prerender'
+	def template = file('src/wasmJsMain/resources/index.html')
+	def output = layout.buildDirectory.file('dist/wasmJs/productionExecutable/index.html')
+	inputs.file(template)
+	args(template.absolutePath, output.get().asFile.absolutePath)
+}
+tasks.named('wasmJsBrowserDistribution').configure {
+	finalizedBy(prerender)
+}
