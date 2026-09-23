@@ -1,0 +1,12 @@
+// Klib ABI Dump
+// Targets: [linuxArm64, linuxX64, macosArm64, mingwX64, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <com.jakewharton.mosaic:mosaic-html>
+final fun (kotlin.text/StringBuilder).com.jakewharton.mosaic.html/appendRows(com.jakewharton.mosaic/TextCanvas) // com.jakewharton.mosaic.html/appendRows|appendRows@kotlin.text.StringBuilder(com.jakewharton.mosaic.TextCanvas){}[0]
+final fun com.jakewharton.mosaic.html/ansiToHtml(kotlin/CharSequence): kotlin/String // com.jakewharton.mosaic.html/ansiToHtml|ansiToHtml(kotlin.CharSequence){}[0]
+final fun com.jakewharton.mosaic.html/renderHtml(kotlin/Int, kotlin/Int, com.jakewharton.mosaic.terminal/Terminal.Theme = ..., kotlin/Function2<androidx.compose.runtime/Composer, kotlin/Int, kotlin/Unit>): kotlin/String // com.jakewharton.mosaic.html/renderHtml|renderHtml(kotlin.Int;kotlin.Int;com.jakewharton.mosaic.terminal.Terminal.Theme;kotlin.Function2<androidx.compose.runtime.Composer,kotlin.Int,kotlin.Unit>){}[0]
+final fun com.jakewharton.mosaic.html/safeHref(kotlin/String): kotlin/String? // com.jakewharton.mosaic.html/safeHref|safeHref(kotlin.String){}[0]

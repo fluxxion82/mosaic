@@ -1,0 +1,11 @@
+// Klib ABI Dump
+// Targets: [wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <com.jakewharton.mosaic:mosaic-browser>
+final fun com.jakewharton.mosaic.browser/rememberLocationHash(androidx.compose.runtime/Composer?, kotlin/Int): androidx.compose.runtime/State<kotlin/String> // com.jakewharton.mosaic.browser/rememberLocationHash|rememberLocationHash(androidx.compose.runtime.Composer?;kotlin.Int){}[0]
+final fun com.jakewharton.mosaic.browser/renderMosaic(org.w3c.dom/HTMLElement, kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Function2<androidx.compose.runtime/Composer, kotlin/Int, kotlin/Unit>): kotlinx.coroutines/Job // com.jakewharton.mosaic.browser/renderMosaic|renderMosaic(org.w3c.dom.HTMLElement;kotlin.Boolean;kotlin.Boolean;kotlin.Function2<androidx.compose.runtime.Composer,kotlin.Int,kotlin.Unit>){}[0]
+final fun com.jakewharton.mosaic.browser/setLocationHash(kotlin/String) // com.jakewharton.mosaic.browser/setLocationHash|setLocationHash(kotlin.String){}[0]
