@@ -380,6 +380,12 @@ public final class com/jakewharton/mosaic/text/AnnotatedStringKt {
 	public static final fun withStyle (Lcom/jakewharton/mosaic/text/AnnotatedString$Builder;Lcom/jakewharton/mosaic/text/SpanStyle;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;
 }
 
+public final class com/jakewharton/mosaic/text/CodePointWidthKt {
+	public static final fun codePointWidth (I)I
+	public static final fun forEachTerminalCell (Ljava/lang/CharSequence;Lkotlin/jvm/functions/Function4;)V
+	public static final fun terminalWidth (Ljava/lang/CharSequence;)I
+}
+
 public final class com/jakewharton/mosaic/text/SpanStyle {
 	public static final field $stable I
 	public fun <init> ()V
