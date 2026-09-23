@@ -18,13 +18,16 @@
 
 package com.jakewharton.mosaic.layout
 
+import com.jakewharton.mosaic.SpaceCharCodePoint
 import com.jakewharton.mosaic.TextPixel
 import com.jakewharton.mosaic.TextSurface
 import com.jakewharton.mosaic.UnspecifiedCodePoint
+import com.jakewharton.mosaic.WideContinuationCodePoint
 import com.jakewharton.mosaic.isSpecifiedCodePoint
 import com.jakewharton.mosaic.isUnspecifiedCodePoint
 import com.jakewharton.mosaic.text.AnnotatedString
 import com.jakewharton.mosaic.text.SpanStyle
+import com.jakewharton.mosaic.text.forEachTerminalCell
 import com.jakewharton.mosaic.text.getLocalRawSpanStyles
 import com.jakewharton.mosaic.ui.Color
 import com.jakewharton.mosaic.ui.TextStyle
@@ -36,7 +39,6 @@ import com.jakewharton.mosaic.ui.isUnspecifiedColor
 import com.jakewharton.mosaic.ui.isUnspecifiedTextStyle
 import com.jakewharton.mosaic.ui.unit.IntOffset
 import com.jakewharton.mosaic.ui.unit.IntSize
-import de.cketti.codepoints.codePointAt
 import kotlin.math.max
 
 public interface DrawScope {
@@ -266,27 +268,49 @@ internal open class TextCanvasDrawScope(
 		underlineColor: Color,
 		spanStylesProvider: ((start: Int, end: Int) -> List<SpanStyle>)?,
 	) {
-		var pixelIndex = 0
 		var characterColumn = column
-		while (pixelIndex < text.length) {
-			val character = canvas[row, characterColumn++]
-
-			val pixelEnd = if (text[pixelIndex].isHighSurrogate()) {
-				pixelIndex + 2
-			} else {
-				pixelIndex + 1
+		text.forEachTerminalCell { start, end, codePoint, width ->
+			// A wide character needs both cells. At the right edge, draw a space rather than let the
+			// terminal wrap or clip it.
+			val fits = width == 1 || canvas.translationX + characterColumn + 1 < canvas.width
+			canvas.detachWideCharacter(row, characterColumn)
+			val character = canvas[row, characterColumn]
+			character.updateTextPixel(
+				if (fits) codePoint else SpaceCharCodePoint,
+				foreground,
+				background,
+				textStyle,
+				underlineStyle,
+				underlineColor,
+			)
+			// Combining marks, variation selectors, and joined code points share the first cell.
+			val baseEnd = start + if (codePoint >= 0x10000) 2 else 1
+			if (fits && end > baseEnd) {
+				character.combining = text.substring(baseEnd, end)
 			}
-
-			character.updateTextPixel(text.codePointAt(pixelIndex), foreground, background, textStyle, underlineStyle, underlineColor)
-			spanStylesProvider?.invoke(pixelIndex, pixelEnd)?.forEach {
+			spanStylesProvider?.invoke(start, end)?.forEach {
 				character.updateTextPixel(UnspecifiedCodePoint, it.color, it.background, it.textStyle, it.underlineStyle, it.underlineColor)
 				if (it.link != null) {
 					character.link = it.link
 				}
 			}
-
-			pixelIndex = pixelEnd
+			if (width == 2 && fits) {
+				// The second cell carries the same style so backgrounds and links span both.
+				canvas.detachWideCharacter(row, characterColumn + 1)
+				canvas[row, characterColumn + 1].copyStyleFrom(character, WideContinuationCodePoint)
+			}
+			characterColumn += if (fits) width else 1
 		}
+	}
+
+	private fun TextPixel.copyStyleFrom(other: TextPixel, codePoint: Int) {
+		this.codePoint = codePoint
+		foreground = other.foreground
+		background = other.background
+		textStyle = other.textStyle
+		underlineStyle = other.underlineStyle
+		underlineColor = other.underlineColor
+		link = other.link
 	}
 
 	private inline fun drawTextPixel(
@@ -299,6 +323,9 @@ internal open class TextCanvasDrawScope(
 		underlineStyle: UnderlineStyle = UnderlineStyle.Unspecified,
 		underlineColor: Color = Color.Unspecified,
 	) {
+		if (codePoint.isSpecifiedCodePoint) {
+			canvas.detachWideCharacter(y, x)
+		}
 		canvas[y, x].updateTextPixel(codePoint, foreground, background, textStyle, underlineStyle, underlineColor)
 	}
 

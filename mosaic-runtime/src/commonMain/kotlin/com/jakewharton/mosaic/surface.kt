@@ -45,6 +45,23 @@ internal class TextSurface(
 		return cells[y * width + x]
 	}
 
+	/**
+	 * Prepare the cell at [row], [column] to receive a new code point by breaking up any wide
+	 * character it belongs to, so no half of one is left behind.
+	 */
+	fun detachWideCharacter(row: Int, column: Int) {
+		val x = translationX + column
+		val y = row + translationY
+		if (x !in 0 until width || y !in 0 until height) return
+		val index = y * width + x
+		if (cells[index].codePoint == WideContinuationCodePoint && x > 0) {
+			cells[index - 1].codePoint = SpaceCharCodePoint
+		}
+		if (x + 1 < width && cells[index + 1].codePoint == WideContinuationCodePoint) {
+			cells[index + 1].codePoint = SpaceCharCodePoint
+		}
+	}
+
 	override fun appendRowTo(appendable: Appendable, row: Int, ansiLevel: AnsiLevel, supportsKittyUnderlines: Boolean) {
 		// Reused heap allocation for building ANSI attributes inside the loop.
 		val attributes = mutableListOf<String>()
@@ -137,7 +154,13 @@ internal class TextSurface(
 				}
 			}
 
-			appendable.appendCodePoint(pixel.codePoint)
+			if (pixel.codePoint != WideContinuationCodePoint) {
+				appendable.appendCodePoint(pixel.codePoint)
+				pixel.combining?.let(appendable::append)
+			} else if (columnIndex == rowStart || lastPixel.codePoint == WideContinuationCodePoint) {
+				// A continuation without its wide character would shift the rest of the row left.
+				appendable.append(' ')
+			}
 			lastPixel = pixel
 		}
 
@@ -230,7 +253,15 @@ internal class TextSurface(
 	}
 }
 
-internal class TextPixel(var codePoint: Int) {
+internal class TextPixel(codePoint: Int) {
+	var codePoint: Int = codePoint
+		set(value) {
+			field = value
+			combining = null
+		}
+
+	/** Zero-width code points (combining marks, joiners, variation selectors) drawn with this one. */
+	var combining: String? = null
 	var background: Color = Color.Unspecified
 	var foreground: Color = Color.Unspecified
 	var textStyle: TextStyle = TextStyle.Empty
@@ -245,12 +276,18 @@ internal class TextPixel(var codePoint: Int) {
 			textStyle.isEmptyTextStyle &&
 			underlineStyle.isUnspecifiedUnderlineStyle &&
 			underlineColor.isUnspecifiedColor &&
-			link == null
+			link == null &&
+			combining == null
 	}
 
 	override fun toString() = buildString {
 		append("TextPixel(\"")
-		appendCodePoint(codePoint)
+		if (codePoint == WideContinuationCodePoint) {
+			append("<wide>")
+		} else {
+			appendCodePoint(codePoint)
+			combining?.let(::append)
+		}
 		append("\"")
 		if (background.isSpecifiedColor) {
 			append(" bg=")
