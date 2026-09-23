@@ -1,0 +1,11 @@
+public final class com/jakewharton/mosaic/html/AnsiHtmlKt {
+	public static final fun ansiToHtml (Ljava/lang/CharSequence;)Ljava/lang/String;
+	public static final fun safeHref (Ljava/lang/String;)Ljava/lang/String;
+}
+
+public final class com/jakewharton/mosaic/html/RenderHtmlKt {
+	public static final fun appendRows (Ljava/lang/StringBuilder;Lcom/jakewharton/mosaic/TextCanvas;)V
+	public static final fun renderHtml (IILcom/jakewharton/mosaic/terminal/Terminal$Theme;Lkotlin/jvm/functions/Function2;)Ljava/lang/String;
+	public static synthetic fun renderHtml$default (IILcom/jakewharton/mosaic/terminal/Terminal$Theme;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Ljava/lang/String;
+}
+
