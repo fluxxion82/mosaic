@@ -1,3 +1,6 @@
+@file:JvmName("MosaicKt")
+@file:JvmMultifileClass
+
 package com.jakewharton.mosaic
 
 import androidx.collection.mutableScatterSetOf
@@ -15,7 +18,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.jakewharton.mosaic.NonInteractivePolicy.Exit
 import com.jakewharton.mosaic.layout.KeyEvent
 import com.jakewharton.mosaic.layout.MosaicNode
 import com.jakewharton.mosaic.terminal.KeyboardEvent
@@ -26,6 +28,8 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
+import kotlin.jvm.JvmMultifileClass
+import kotlin.jvm.JvmName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart.UNDISPATCHED
 import kotlinx.coroutines.Dispatchers.Unconfined
@@ -35,35 +39,6 @@ import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-
-public fun runMosaicMain(
-	content: @Composable () -> Unit,
-) {
-	runMosaicBlocking(content = content)
-}
-
-public fun runMosaicBlocking(
-	onNonInteractive: NonInteractivePolicy = Exit,
-	content: @Composable () -> Unit,
-): Boolean {
-	return runBlocking {
-		runMosaic(onNonInteractive, content)
-	}
-}
-
-public suspend fun runMosaic(
-	onNonInteractive: NonInteractivePolicy = Exit,
-	content: @Composable () -> Unit,
-): Boolean = withTerminal(onNonInteractive) { terminal ->
-	val rendering = if (env("MOSAIC_DEBUG_RENDERING") == "true") {
-		DebugRendering(terminal.capabilities)
-	} else {
-		AnsiRendering(terminal.capabilities)
-	}
-
-	runMosaicComposition(terminal, rendering, content)
-}
 
 internal suspend fun runMosaicComposition(
 	terminal: Terminal,

@@ -1,6 +1,7 @@
 apply plugin: 'org.jetbrains.kotlin.multiplatform'
 apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 apply from: "$rootDir/addAllTargets.gradle"
+apply from: "$rootDir/addWasmTarget.gradle"
 apply from: "$rootDir/publish.gradle"
 apply plugin: 'dev.drewhamilton.poko'
 apply plugin: 'com.jakewharton.mosaic.build'
@@ -23,10 +24,22 @@ kotlin {
 				api libs.androidx.lifecycle.compose
 				api libs.kotlinx.coroutines.core
 				api projects.mosaicTerminal
-				implementation projects.mosaicTtyTerminal
 				implementation libs.androidx.collection
 				implementation libs.codepoints
 			}
+		}
+		// Targets which can bind to a real TTY. Excludes wasmJs.
+		ttyMain {
+			dependsOn(commonMain)
+			dependencies {
+				implementation projects.mosaicTtyTerminal
+			}
+		}
+		jvmMain {
+			dependsOn(ttyMain)
+		}
+		nativeMain {
+			dependsOn(ttyMain)
 		}
 		commonTest {
 			dependencies {

@@ -1,6 +1,7 @@
 apply plugin: 'org.jetbrains.kotlin.multiplatform'
 apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 apply from: "$rootDir/addAllTargets.gradle"
+apply from: "$rootDir/addWasmTarget.gradle"
 apply from: "$rootDir/publish.gradle"
 apply plugin: 'dev.drewhamilton.poko'
 apply plugin: 'com.jakewharton.mosaic.build'

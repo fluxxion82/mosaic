@@ -18,7 +18,7 @@ import assertk.assertions.isNotEqualTo
 import assertk.assertions.isNotNull
 import kotlin.test.Test
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 
 private class TestTagModifier<T>(val name: String, val value: T) : Modifier.Element
@@ -35,7 +35,7 @@ class ComposedModifierTest {
 	/**
 	 * Confirm that a [composed] modifier correctly constructs separate instances when materialized
 	 */
-	@Test fun materializeComposedModifier() = runBlocking(TestFrameClock()) {
+	@Test fun materializeComposedModifier() = runTest(TestFrameClock()) {
 		// Note: assumes single-threaded composition
 		var counter = 0
 		val sourceMod = Modifier.testTag("static", 0).composed { testTag("dynamic", ++counter) }
@@ -83,7 +83,7 @@ class ComposedModifierTest {
 	}
 
 	/** Confirm that recomposition occurs on invalidation */
-	@Test fun recomposeComposedModifier() = runBlocking {
+	@Test fun recomposeComposedModifier() = runTest {
 		// Manually invalidate the composition of the modifier instead of using mutableStateOf
 		// Snapshot-based recomposition requires explicit snapshot commits/global write observers.
 		var value = 0
@@ -120,7 +120,7 @@ class ComposedModifierTest {
 		}
 	}
 
-	@Test fun rememberComposedModifier() = runBlocking {
+	@Test fun rememberComposedModifier() = runTest {
 		lateinit var scope: RecomposeScope
 		val sourceMod =
 			Modifier.composed {
@@ -154,7 +154,7 @@ class ComposedModifierTest {
 		}
 	}
 
-	@Test fun nestedComposedModifiers() = runBlocking {
+	@Test fun nestedComposedModifiers() = runTest {
 		val mod = Modifier.composed { composed { testTag("nested", 10) } }
 
 		val frameClock = TestFrameClock()
@@ -223,7 +223,7 @@ class ComposedModifierTest {
 		}
 	}
 
-	@Test fun recomposingKeyedComposedModifierSkips() = runBlocking {
+	@Test fun recomposingKeyedComposedModifierSkips() = runTest {
 		// Manually invalidate the composition instead of using mutableStateOf
 		// Snapshot-based recomposition requires explicit snapshot commits/global write observers.
 		lateinit var scope: RecomposeScope
