@@ -45,6 +45,11 @@ internal class TextSurface(
 		return cells[y * width + x]
 	}
 
+	/** Whether the cell at [row], [column] (relative to the current translation) is on the canvas. */
+	fun contains(row: Int, column: Int): Boolean {
+		return translationX + column in 0 until width && row + translationY in 0 until height
+	}
+
 	/**
 	 * Prepare the cell at [row], [column] to receive a new code point by breaking up any wide
 	 * character it belongs to, so no half of one is left behind.

@@ -270,6 +270,12 @@ internal open class TextCanvasDrawScope(
 	) {
 		var characterColumn = column
 		text.forEachTerminalCell { start, end, codePoint, width ->
+			// Text can extend past the canvas (for example when it is wider than a fixed-width
+			// parent). Cells outside it are not drawn.
+			if (!canvas.contains(row, characterColumn)) {
+				characterColumn += width
+				return@forEachTerminalCell
+			}
 			// A wide character needs both cells. At the right edge, draw a space rather than let the
 			// terminal wrap or clip it.
 			val fits = width == 1 || canvas.translationX + characterColumn + 1 < canvas.width
