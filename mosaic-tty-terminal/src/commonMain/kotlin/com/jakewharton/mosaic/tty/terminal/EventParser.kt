@@ -301,6 +301,19 @@ public class EventParser internal constructor(
 
 				'H'.code -> return parseCsiLegacyKeyboard(buffer, start, end, KeyboardEvent.Home)
 
+				'Z'.code -> {
+					// Back-tab: the legacy encoding of Shift+Tab, the same key the Kitty protocol reports as
+					// `CSI 9 ; 2 u`. The final byte itself means shift, so it is set even when a
+					// `CSI 1 ; modifiers Z` form does not carry it.
+					return parseCsiLegacyKeyboard(
+						buffer,
+						start,
+						end,
+						codepoint = 0x09,
+						impliedModifiers = KeyboardEvent.ModifierShift,
+					)
+				}
+
 				'~'.code -> {
 					val delimiter =
 						buffer.indexOfOrDefault(';'.code.toByte(), b3Index, finalIndex, finalIndex)
@@ -683,15 +696,22 @@ public class EventParser internal constructor(
 		return UnknownEvent(buffer.copyOfRange(start, offset))
 	}
 
-	private fun parseCsiLegacyKeyboard(buffer: ByteArray, start: Int, end: Int, codepoint: Int): Event {
-		// CSI {ABCDEFHPQS}
-		// CSI 1 ; modifier:event-type {ABCDEFHPQS}
+	private fun parseCsiLegacyKeyboard(
+		buffer: ByteArray,
+		start: Int,
+		end: Int,
+		codepoint: Int,
+		/** Modifiers the final byte stands for on its own, such as shift for the `Z` of back-tab. */
+		impliedModifiers: Int = 0,
+	): Event {
+		// CSI {ABCDEFHPQSZ}
+		// CSI 1 ; modifier:event-type {ABCDEFHPQSZ}
 		//  https://sw.kovidgoyal.net/kitty/keyboard-protocol/#legacy-key-event-encoding
 
 		val finalIndex = end - 1
 		val b3Index = start + 2
 		if (b3Index == finalIndex) {
-			return KeyboardEvent(codepoint)
+			return KeyboardEvent(codepoint, modifiers = impliedModifiers)
 		}
 
 		// This is just an 'if' that can also use 'break' to jump out of its own logic.
@@ -705,7 +725,7 @@ public class EventParser internal constructor(
 			val modifiers = buffer.parseIntDigits(b5Index, modifiersEnd, orElse = { break@error }) - 1
 			val eventType = buffer.parseIntDigits(modifiersEnd + 1, modifiersDelimiter, orElse = { 1 })
 
-			return KeyboardEvent(codepoint, modifiers = modifiers, eventType = eventType)
+			return KeyboardEvent(codepoint, modifiers = modifiers or impliedModifiers, eventType = eventType)
 		}
 
 		return UnknownEvent(buffer.copyOfRange(start, end))
