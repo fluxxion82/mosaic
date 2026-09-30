@@ -29,9 +29,13 @@ import com.jakewharton.mosaic.terminal.XtermPixelSizeEvent
 import com.jakewharton.mosaic.tty.Tty
 import kotlin.concurrent.Volatile
 
-public class EventParser(
+public class EventParser internal constructor(
 	private val tty: Tty,
+	/** Test seam invoked immediately before each read of [tty]. */
+	private val beforeRead: () -> Unit,
 ) {
+	public constructor(tty: Tty) : this(tty, {})
+
 	private companion object {
 		private const val BufferSize = 8 * 1024
 		private const val BareEscapeDisambiguationReadTimeoutMillis = 100
@@ -121,6 +125,7 @@ public class EventParser(
 			if (kittyDisambiguateEscapeCodes || limit != 1 || buffer[0] != 0x1B.toByte()) {
 				// Common case: we are using the Kitty keyboard protocol to disambiguate escape keys, or
 				// the buffer contains anything other than a bare escape. Do a normal read for more data.
+				beforeRead()
 				val read = tty.read(buffer, limit, BufferSize - limit)
 				if (read == -1) break // EOF
 				if (read == 0) return null // Interrupt
@@ -132,6 +137,7 @@ public class EventParser(
 			// Otherwise, perform a quick read to see if we have any more bytes. This will allow us to
 			// determine whether the bare escape was truly a legacy keyboard escape event, or just the
 			// start of some other escape sequence.
+			beforeRead()
 			val read = tty.readWithTimeout(
 				buffer,
 				1,
@@ -250,6 +256,24 @@ public class EventParser(
 
 	private fun parseCsi(buffer: ByteArray, start: Int, limit: Int): Event? {
 		val b3Index = start + 2
+		if (b3Index < limit && buffer[b3Index].toInt() == '['.code) {
+			// The Linux console encodes F1 through F5 as `CSI [ A` through `CSI [ E`.
+			val b4Index = start + 3
+			if (b4Index == limit) return null
+			val codepoint = when (buffer[b4Index].toInt()) {
+				'A'.code -> KeyboardEvent.F1
+				'B'.code -> KeyboardEvent.F2
+				'C'.code -> KeyboardEvent.F3
+				'D'.code -> KeyboardEvent.F4
+				'E'.code -> KeyboardEvent.F5
+				else -> -1
+			}
+			if (codepoint != -1) {
+				offset = start + 4
+				return KeyboardEvent(codepoint)
+			}
+		}
+
 		val finalIndex = buffer.indexOfFirstOrElse(
 			// Skip leading 0x1B5B.
 			start = b3Index,

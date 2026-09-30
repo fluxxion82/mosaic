@@ -79,7 +79,7 @@ public expect class TestTerminal : AutoCloseable {
 	 * while waiting for data, or if at least [timeoutMillis] have passed without data.
 	 *
 	 * @param timeoutMillis A value of 0 will perform a non-blocking read. Otherwise, valid values
-	 * are 1 to 999 which represent a maximum time (in milliseconds) to wait for data. Note: This
+	 * are positive and represent a maximum time (in milliseconds) to wait for data. Note: This
 	 * value is not validated.
 	 * @see readTty
 	 * @see interruptTtyRead
@@ -117,7 +117,7 @@ public expect class TestTerminal : AutoCloseable {
 	 * is called while waiting for data, or if at least [timeoutMillis] have passed without data.
 	 *
 	 * @param timeoutMillis A value of 0 will perform a non-blocking read. Otherwise, valid values
-	 * are 1 to 999 which represent a maximum time (in milliseconds) to wait for data. Note: This
+	 * are positive and represent a maximum time (in milliseconds) to wait for data. Note: This
 	 * value is not validated.
 	 * @see readStandardOutput
 	 * @see interruptStandardOutputRead
@@ -148,7 +148,7 @@ public expect class TestTerminal : AutoCloseable {
 	 * is called while waiting for data, or if at least [timeoutMillis] have passed without data.
 	 *
 	 * @param timeoutMillis A value of 0 will perform a non-blocking read. Otherwise, valid values
-	 * are 1 to 999 which represent a maximum time (in milliseconds) to wait for data. Note: This
+	 * are positive and represent a maximum time (in milliseconds) to wait for data. Note: This
 	 * value is not validated.
 	 * @see readStandardError
 	 * @see interruptStandardErrorRead

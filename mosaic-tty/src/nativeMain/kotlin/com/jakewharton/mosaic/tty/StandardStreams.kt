@@ -35,6 +35,8 @@ public actual class StandardStreams internal constructor(
 	public actual fun isErrorTty(): Boolean = mosaic_streams_is_stderr_tty(ptr).isTty
 
 	public actual fun readInput(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
+		if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 		buffer.asUByteArray().usePinned {
 			mosaic_streams_read_input(ptr, it.addressOf(offset), count).useContents {
 				if (error == 0U) return this.count
@@ -44,6 +46,8 @@ public actual class StandardStreams internal constructor(
 	}
 
 	public actual fun readInputWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
+		if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 		buffer.asUByteArray().usePinned {
 			mosaic_streams_read_input_with_timeout(ptr, it.addressOf(offset), count, timeoutMillis).useContents {
 				if (error == 0U) return this.count
@@ -59,6 +63,8 @@ public actual class StandardStreams internal constructor(
 	}
 
 	public actual fun writeOutput(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
+		if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 		buffer.asUByteArray().usePinned {
 			mosaic_streams_write_output(ptr, it.addressOf(offset), count).useContents {
 				if (error == 0U) return this.count
@@ -68,6 +74,8 @@ public actual class StandardStreams internal constructor(
 	}
 
 	public actual fun writeError(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
+		if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 		buffer.asUByteArray().usePinned {
 			mosaic_streams_write_error(ptr, it.addressOf(offset), count).useContents {
 				if (error == 0U) return this.count
@@ -102,6 +110,8 @@ public actual class StandardStreams internal constructor(
 		private val ptr: CValuesRef<MosaicStreams>?,
 	) : AutoCloseable {
 		public actual fun readOutput(buffer: ByteArray, offset: Int, count: Int): Int {
+			buffer.checkRange(offset, count)
+			if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 			buffer.asUByteArray().usePinned {
 				mosaic_streams_read_intercepted_output(ptr, it.addressOf(offset), count).useContents {
 					if (error == 0U) return this.count
@@ -111,6 +121,8 @@ public actual class StandardStreams internal constructor(
 		}
 
 		public actual fun readOutputWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+			buffer.checkRange(offset, count)
+			if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 			buffer.asUByteArray().usePinned {
 				mosaic_streams_read_intercepted_output_with_timeout(ptr, it.addressOf(offset), count, timeoutMillis).useContents {
 					if (error == 0U) return this.count
@@ -126,6 +138,8 @@ public actual class StandardStreams internal constructor(
 		}
 
 		public actual fun readError(buffer: ByteArray, offset: Int, count: Int): Int {
+			buffer.checkRange(offset, count)
+			if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 			buffer.asUByteArray().usePinned {
 				mosaic_streams_read_intercepted_error(ptr, it.addressOf(offset), count).useContents {
 					if (error == 0U) return this.count
@@ -135,6 +149,8 @@ public actual class StandardStreams internal constructor(
 		}
 
 		public actual fun readErrorWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+			buffer.checkRange(offset, count)
+			if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 			buffer.asUByteArray().usePinned {
 				mosaic_streams_read_intercepted_error_with_timeout(ptr, it.addressOf(offset), count, timeoutMillis).useContents {
 					if (error == 0U) return this.count

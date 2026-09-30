@@ -115,6 +115,15 @@ final class Jni {
 		int count
 	);
 
+	/** POSIX only. */
+	static native int ttyWriteWithTimeout(
+		long ttyPtr,
+		byte[] buffer,
+		int offset,
+		int count,
+		int timeoutMillis
+	);
+
 	static native void ttyEnableRawMode(long ttyPtr);
 
 	static native void ttyEnableWindowResizeEvents(long ttyPtr);
@@ -126,6 +135,9 @@ final class Jni {
 	static native int[] ttyCurrentSize(long ttyPtr);
 
 	static native void ttyReset(long ttyPtr);
+
+	/** POSIX only. */
+	static native void ttyResetImmediately(long ttyPtr);
 
 	static native void ttyFree(long ttyPtr);
 

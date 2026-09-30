@@ -63,14 +63,18 @@ public final class com/jakewharton/mosaic/tty/Tty : java/lang/AutoCloseable {
 	public fun close ()V
 	public final fun currentSize ()[I
 	public final fun enableRawMode ()V
+	public final fun enableShutdownSignalInterrupt ()V
 	public final fun enableWindowResizeEvents ()V
 	public final fun interruptRead ()V
 	public final fun read ([BII)I
 	public final fun readWithTimeout ([BIII)I
 	public final fun reset ()V
+	public final fun resetImmediately ()V
 	public final fun setCallback (Lcom/jakewharton/mosaic/tty/Tty$Callback;)V
+	public final fun shutdownSignal ()I
 	public static final fun tryBind ()Lcom/jakewharton/mosaic/tty/Tty;
 	public final fun write ([BII)I
+	public final fun writeWithTimeout ([BIII)I
 }
 
 public abstract interface class com/jakewharton/mosaic/tty/Tty$Callback {

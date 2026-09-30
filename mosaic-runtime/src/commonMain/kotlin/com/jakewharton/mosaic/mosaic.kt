@@ -46,6 +46,7 @@ import kotlinx.coroutines.selects.select
 internal suspend fun runMosaicComposition(
 	terminal: Terminal,
 	rendering: Rendering,
+	output: (String) -> Unit,
 	content: @Composable () -> Unit,
 ) {
 	val frameRequests = Channel<Unit>(CONFLATED)
@@ -53,7 +54,7 @@ internal suspend fun runMosaicComposition(
 	val mosaicComposition = MosaicComposition(
 		coroutineContext = coroutineContext + clock,
 		onDraw = { rootNode ->
-			print(rendering.render(rootNode).toString())
+			output(rendering.render(rootNode).toString())
 		},
 		terminal = terminal,
 	)

@@ -9,8 +9,10 @@ import com.jakewharton.mosaic.tty.Libmosaic.mosaic_tty_interrupt_read
 import com.jakewharton.mosaic.tty.Libmosaic.mosaic_tty_read
 import com.jakewharton.mosaic.tty.Libmosaic.mosaic_tty_read_with_timeout
 import com.jakewharton.mosaic.tty.Libmosaic.mosaic_tty_reset
+import com.jakewharton.mosaic.tty.Libmosaic.mosaic_tty_reset_immediately
 import com.jakewharton.mosaic.tty.Libmosaic.mosaic_tty_set_callback
 import com.jakewharton.mosaic.tty.Libmosaic.mosaic_tty_write
+import com.jakewharton.mosaic.tty.Libmosaic.mosaic_tty_write_with_timeout
 import java.io.InputStream
 import java.io.OutputStream
 import java.lang.foreign.Arena
@@ -54,6 +56,7 @@ public class Tty internal constructor(
 	private var callbackArena: Arena? = null
 
 	public fun setCallback(callback: Callback?) {
+		if (ptr == MemorySegment.NULL) return // Closed; the callback was already freed.
 		callbackArena?.let { arena ->
 			arena.close()
 			callbackArena = null
@@ -98,6 +101,7 @@ public class Tty internal constructor(
 
 	@Throws(IOException::class)
 	public fun read(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		Arena.ofConfined().use { arena ->
 			val segment = arena.allocate(count.toLong())
 			val result = mosaic_tty_read(arena, ptr, segment, count)
@@ -113,6 +117,7 @@ public class Tty internal constructor(
 
 	@Throws(IOException::class)
 	public fun readWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
 		Arena.ofConfined().use { arena ->
 			val segment = arena.allocate(count.toLong())
 			val result = mosaic_tty_read_with_timeout(arena, ptr, segment, count, timeoutMillis)
@@ -135,10 +140,27 @@ public class Tty internal constructor(
 
 	@Throws(IOException::class)
 	public fun write(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		Arena.ofConfined().use { arena ->
 			val segment = arena.allocate(count.toLong())
 			MemorySegment.copy(buffer, offset, segment, ValueLayout.JAVA_BYTE, 0, count)
 			val result = mosaic_tty_write(arena, ptr, segment, count)
+			val error = MosaicIoResult.error(result)
+			if (error == 0) {
+				return MosaicIoResult.count(result)
+			}
+			throwIoe(error)
+		}
+	}
+
+	@Throws(IOException::class)
+	public fun writeWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
+		if (isWindowsHost) return write(buffer, offset, count)
+		Arena.ofConfined().use { arena ->
+			val segment = arena.allocate(count.toLong())
+			MemorySegment.copy(buffer, offset, segment, ValueLayout.JAVA_BYTE, 0, count)
+			val result = mosaic_tty_write_with_timeout(arena, ptr, segment, count, timeoutMillis)
 			val error = MosaicIoResult.error(result)
 			if (error == 0) {
 				return MosaicIoResult.count(result)
@@ -161,6 +183,13 @@ public class Tty internal constructor(
 		throwIoe(error)
 	}
 
+	/** Does nothing on the JVM, which relies on shutdown hooks instead of signal handlers. */
+	public fun enableShutdownSignalInterrupt() {
+	}
+
+	/** Always 0 on the JVM. */
+	public fun shutdownSignal(): Int = 0
+
 	@Throws(IOException::class)
 	public fun currentSize(): IntArray {
 		Arena.ofConfined().use { arena ->
@@ -181,6 +210,14 @@ public class Tty internal constructor(
 	@Throws(IOException::class)
 	public fun reset() {
 		val error = mosaic_tty_reset(ptr)
+		if (error == 0) return
+		throwIoe(error)
+	}
+
+	@Throws(IOException::class)
+	public fun resetImmediately() {
+		if (isWindowsHost) return reset()
+		val error = mosaic_tty_reset_immediately(ptr)
 		if (error == 0) return
 		throwIoe(error)
 	}

@@ -62,6 +62,7 @@ public class TestTerminal private constructor(
 
 	@Throws(IOException::class)
 	public fun writeTty(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		Arena.ofConfined().use { arena ->
 			val segment = arena.allocate(count.toLong())
 			MemorySegment.copy(buffer, offset, segment, ValueLayout.JAVA_BYTE, 0, count)
@@ -76,6 +77,7 @@ public class TestTerminal private constructor(
 
 	@Throws(IOException::class)
 	public fun readTty(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		Arena.ofConfined().use { arena ->
 			val segment = arena.allocate(count.toLong())
 			val result = mosaic_test_read_tty(arena, ptr, segment, count)
@@ -91,6 +93,7 @@ public class TestTerminal private constructor(
 
 	@Throws(IOException::class)
 	public fun readTtyWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
 		Arena.ofConfined().use { arena ->
 			val segment = arena.allocate(count.toLong())
 			val result = mosaic_test_read_tty_with_timeout(arena, ptr, segment, count, timeoutMillis)
@@ -113,6 +116,7 @@ public class TestTerminal private constructor(
 
 	@Throws(IOException::class)
 	public fun writeStandardInput(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		Arena.ofConfined().use { arena ->
 			val segment = arena.allocate(count.toLong())
 			MemorySegment.copy(buffer, offset, segment, ValueLayout.JAVA_BYTE, 0, count)
@@ -127,6 +131,7 @@ public class TestTerminal private constructor(
 
 	@Throws(IOException::class)
 	public fun readStandardOutput(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		Arena.ofConfined().use { arena ->
 			val segment = arena.allocate(count.toLong())
 			val result = mosaic_test_read_output(arena, ptr, segment, count)
@@ -142,6 +147,7 @@ public class TestTerminal private constructor(
 
 	@Throws(IOException::class)
 	public fun readStandardOutputWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
 		Arena.ofConfined().use { arena ->
 			val segment = arena.allocate(count.toLong())
 			val result = mosaic_test_read_output_with_timeout(arena, ptr, segment, count, timeoutMillis)
@@ -164,6 +170,7 @@ public class TestTerminal private constructor(
 
 	@Throws(IOException::class)
 	public fun readStandardError(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		Arena.ofConfined().use { arena ->
 			val segment = arena.allocate(count.toLong())
 			val result = mosaic_test_read_error(arena, ptr, segment, count)
@@ -179,6 +186,7 @@ public class TestTerminal private constructor(
 
 	@Throws(IOException::class)
 	public fun readStandardErrorWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
 		Arena.ofConfined().use { arena ->
 			val segment = arena.allocate(count.toLong())
 			val result = mosaic_test_read_error_with_timeout(arena, ptr, segment, count, timeoutMillis)
