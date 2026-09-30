@@ -13,6 +13,18 @@ internal const val synchronizedOutputDisable = "$CSI?${synchronizedOutputMode}l"
 internal const val ansiReset = "${CSI}0"
 internal const val clearLine = "${CSI}K"
 internal const val clearDisplay = "${CSI}J"
+internal const val clearScreen = "${CSI}2J"
+
+/** Move the cursor to the 0-based [row] and [column]; the sequence is shortest for column 0. */
+internal fun StringBuilder.appendCursorPosition(row: Int, column: Int) {
+	append(CSI)
+	append(row + 1)
+	if (column > 0) {
+		append(';')
+		append(column + 1)
+	}
+	append('H')
+}
 
 internal const val ansiSeparator = ";"
 internal const val ansiClosingCharacter = "m"

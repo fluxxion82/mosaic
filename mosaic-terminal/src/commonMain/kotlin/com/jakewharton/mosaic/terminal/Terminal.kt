@@ -2,6 +2,7 @@ package com.jakewharton.mosaic.terminal
 
 import dev.drewhamilton.poko.Poko
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 public interface Terminal : AutoCloseable {
@@ -38,6 +39,14 @@ public interface Terminal : AutoCloseable {
 		 * If [interactive] is false, the default is [Size.Default].
 		 */
 		public val size: StateFlow<Size>
+
+		/**
+		 * How many resizes the terminal has reported so far, including ones back to the same [size].
+		 * Every change of this value means the terminal has reflowed what it shows, so a renderer
+		 * which draws in place must redraw everything. It is recorded before any event queue, so a
+		 * resize can never be lost. The default never changes, for terminals which cannot resize.
+		 */
+		public val resizes: StateFlow<Int> get() = NoResizes
 	}
 
 	public interface Capabilities {
@@ -161,3 +170,6 @@ public interface Terminal : AutoCloseable {
 		Dark,
 	}
 }
+
+/** The [Terminal.State.resizes] of a terminal which never resizes. */
+private val NoResizes: StateFlow<Int> = MutableStateFlow(0)

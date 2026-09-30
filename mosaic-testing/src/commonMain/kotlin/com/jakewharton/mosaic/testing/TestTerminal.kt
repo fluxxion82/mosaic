@@ -23,6 +23,7 @@ public class TestTerminal(
 		override val focused: MutableStateFlow<Boolean> = MutableStateFlow(true)
 		override val theme: MutableStateFlow<Terminal.Theme> = MutableStateFlow(Terminal.Theme.Unknown)
 		override val size: MutableStateFlow<Terminal.Size> = MutableStateFlow(Terminal.Size.Default)
+		override val resizes: MutableStateFlow<Int> = MutableStateFlow(0)
 	}
 
 	public class Capabilities(

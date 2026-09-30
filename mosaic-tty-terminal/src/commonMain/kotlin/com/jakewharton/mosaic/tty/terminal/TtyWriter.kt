@@ -33,21 +33,48 @@ internal class TtyWriter(
 	val isClosing: Boolean get() = closing
 
 	/**
+	 * Whether some write did not go out completely: it failed, or [shutdown] abandoned it. The TTY
+	 * may then be in the middle of whatever that write was doing, such as synchronized output.
+	 */
+	@Volatile
+	var hadIncompleteWrite = false
+		private set
+
+	/**
 	 * Write all of [buffer] as one transaction. Returns false, without waiting for the lock, once
 	 * [shutdown] has been requested: the TTY is being restored and nothing may follow that.
+	 *
+	 * [onWritten] runs once the whole buffer went out, still inside the transaction, so bookkeeping
+	 * about what the TTY has received cannot be overtaken by a [shutdown]: either both the write and
+	 * the bookkeeping happened before the shutdown, or neither did.
 	 */
-	fun write(buffer: ByteArray): Boolean {
+	fun write(buffer: ByteArray, onWritten: () -> Unit = {}): Boolean {
 		if (closing) return false
 		lock.withLock {
 			if (closing) return false
 			var written = 0
-			while (written < buffer.size) {
-				// Once shutdown restored the TTY over this write, the rest of it must not follow.
-				if (abandoned) return false
-				val result = write(buffer, written, buffer.size - written)
-				check(result > 0) { "TTY write made no progress (returned $result)" }
-				written += result
+			try {
+				while (written < buffer.size) {
+					// Once shutdown restored the TTY over this write, the rest of it must not follow.
+					if (abandoned) {
+						hadIncompleteWrite = true
+						return false
+					}
+					val result = write(buffer, written, buffer.size - written)
+					check(result > 0) { "TTY write made no progress (returned $result)" }
+					written += result
+				}
+			} catch (t: Throwable) {
+				hadIncompleteWrite = true
+				throw t
 			}
+			// The last chunk may have gone out only after shutdown gave up waiting and restored the
+			// TTY: then the bookkeeping must not run late, as if the write had preceded the restore.
+			if (abandoned) {
+				hadIncompleteWrite = true
+				return false
+			}
+			onWritten()
 		}
 		return true
 	}

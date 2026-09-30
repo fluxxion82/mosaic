@@ -5,7 +5,9 @@ import assertk.assertions.isEqualTo
 import assertk.assertions.isFalse
 import assertk.assertions.isIn
 import assertk.assertions.isTrue
+import com.jakewharton.mosaic.tty.IOException
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CompletableDeferred
@@ -121,6 +123,86 @@ class TtyWriterTest {
 				releaseWrite.complete(Unit)
 			}
 		}
+	}
+
+	@Test fun onWrittenRunsOnlyForAWriteWhichWentOutCompletely() = runBlocking {
+		withTimeout(30.seconds) {
+			val output = StringBuilder()
+			val writer = TtyWriter { buffer, offset, _ ->
+				output.append(buffer[offset].toInt().toChar())
+				1
+			}
+			var written = 0
+			assertThat(writer.write("ab".encodeToByteArray()) { written++ }).isTrue()
+			assertThat(written).isEqualTo(1)
+
+			writer.shutdown { output.append("|restore") }
+			assertThat(writer.write("cd".encodeToByteArray()) { written++ }).isFalse()
+			assertThat(written).isEqualTo(1) // Dropped, so the bookkeeping must not claim it went out.
+			assertThat(output.toString()).isEqualTo("ab|restore")
+		}
+	}
+
+	@Test fun onWrittenDoesNotRunForAnAbandonedWrite() = runBlocking {
+		withTimeout(30.seconds) {
+			val output = StringBuilder()
+			val firstByteWritten = CompletableDeferred<Unit>()
+			val releaseWrite = CompletableDeferred<Unit>()
+			try {
+				val writer = TtyWriter(shutdownTimeout = 200.milliseconds) { buffer, offset, _ ->
+					output.append(buffer[offset].toInt().toChar())
+					if (output.length == 1) {
+						firstByteWritten.complete(Unit)
+						runBlocking { releaseWrite.await() }
+					}
+					1
+				}
+				var written = 0
+				val frame = async(Dispatchers.IO) { writer.write("frame".encodeToByteArray()) { written++ } }
+				firstByteWritten.await()
+				async(Dispatchers.IO) { writer.shutdown { output.append("|restore") } }.await()
+				releaseWrite.complete(Unit)
+				assertThat(frame.await()).isFalse()
+				assertThat(written).isEqualTo(0)
+			} finally {
+				releaseWrite.complete(Unit)
+			}
+		}
+	}
+
+	@Test fun onWrittenDoesNotRunWhenTheLastChunkGoesOutAfterAbandonment() = runBlocking {
+		withTimeout(30.seconds) {
+			val output = StringBuilder()
+			val entered = CompletableDeferred<Unit>()
+			val releaseWrite = CompletableDeferred<Unit>()
+			try {
+				// Accepts the whole buffer in one call, but only returns once released.
+				val writer = TtyWriter(shutdownTimeout = 200.milliseconds) { buffer, offset, count ->
+					output.append(buffer.decodeToString(offset, offset + count))
+					entered.complete(Unit)
+					runBlocking { releaseWrite.await() }
+					count
+				}
+				var written = 0
+				val frame = async(Dispatchers.IO) { writer.write("switch".encodeToByteArray()) { written++ } }
+				entered.await()
+				async(Dispatchers.IO) { writer.shutdown { output.append("|restore") } }.await()
+				releaseWrite.complete(Unit)
+				// The bytes did go out, but only after the restore: too late for the bookkeeping.
+				assertThat(frame.await()).isFalse()
+				assertThat(written).isEqualTo(0)
+				assertThat(writer.hadIncompleteWrite).isTrue()
+			} finally {
+				releaseWrite.complete(Unit)
+			}
+		}
+	}
+
+	@Test fun aFailingWriteIsRecordedAsIncomplete() {
+		val writer = TtyWriter { _, _, _ -> throw IOException("EIO") }
+		assertThat(writer.hadIncompleteWrite).isFalse()
+		assertFailsWith<IOException> { writer.write("frame".encodeToByteArray()) }
+		assertThat(writer.hadIncompleteWrite).isTrue()
 	}
 
 	@Test fun shutdownFromWithinAWriteDoesNotDeadlock() {

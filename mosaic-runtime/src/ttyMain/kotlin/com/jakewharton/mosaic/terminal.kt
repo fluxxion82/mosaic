@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 internal suspend fun withTerminal(
 	onNonInteractive: NonInteractivePolicy,
+	alternateScreen: Boolean,
 	block: suspend (terminal: Terminal, output: (String) -> Unit) -> Unit,
 ): Boolean = coroutineScope {
 	val tty = if (onNonInteractive != AssumeAndIgnore) {
@@ -34,7 +35,7 @@ internal suspend fun withTerminal(
 	}
 
 	tty.use {
-		withTty(tty, block)
+		withTty(tty, alternateScreen, block)
 	}
 
 	true
@@ -51,11 +52,12 @@ internal suspend fun withTerminal(
  */
 internal suspend fun withTty(
 	tty: Tty?,
+	alternateScreen: Boolean,
 	block: suspend (terminal: Terminal, output: (String) -> Unit) -> Unit,
 ) {
 	coroutineScope {
 		if (tty != null) {
-			tty.withTerminalIn(block = block)
+			tty.withTerminalIn(alternateScreen = alternateScreen, block = block)
 		} else {
 			NonInteractiveTerminal.use { block(it, ::print) }
 		}

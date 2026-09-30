@@ -79,6 +79,8 @@ abstract interface com.jakewharton.mosaic.terminal/Terminal : kotlin/AutoCloseab
             abstract fun <get-size>(): kotlinx.coroutines.flow/StateFlow<com.jakewharton.mosaic.terminal/Terminal.Size> // com.jakewharton.mosaic.terminal/Terminal.State.size.<get-size>|<get-size>(){}[0]
         abstract val theme // com.jakewharton.mosaic.terminal/Terminal.State.theme|{}theme[0]
             abstract fun <get-theme>(): kotlinx.coroutines.flow/StateFlow<com.jakewharton.mosaic.terminal/Terminal.Theme> // com.jakewharton.mosaic.terminal/Terminal.State.theme.<get-theme>|<get-theme>(){}[0]
+        open val resizes // com.jakewharton.mosaic.terminal/Terminal.State.resizes|{}resizes[0]
+            open fun <get-resizes>(): kotlinx.coroutines.flow/StateFlow<kotlin/Int> // com.jakewharton.mosaic.terminal/Terminal.State.resizes.<get-resizes>|<get-resizes>(){}[0]
     }
 
     final class Size { // com.jakewharton.mosaic.terminal/Terminal.Size|null[0]
