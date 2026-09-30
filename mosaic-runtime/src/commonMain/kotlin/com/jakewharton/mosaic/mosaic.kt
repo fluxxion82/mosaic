@@ -40,6 +40,7 @@ import kotlinx.coroutines.channels.Channel.Factory.CONFLATED
 import kotlinx.coroutines.channels.Channel.Factory.UNLIMITED
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 
@@ -47,6 +48,8 @@ internal suspend fun runMosaicComposition(
 	terminal: Terminal,
 	rendering: Rendering,
 	output: (String) -> Unit,
+	renderMode: RenderMode = RenderMode.Inline,
+	repaint: Repaint = Repaint(),
 	content: @Composable () -> Unit,
 ) {
 	val frameRequests = Channel<Unit>(CONFLATED)
@@ -57,9 +60,18 @@ internal suspend fun runMosaicComposition(
 			output(rendering.render(rootNode).toString())
 		},
 		terminal = terminal,
+		// Inline frames always go out in full, so a repaint request there would only cost a frame.
+		repaint = if (renderMode == RenderMode.FullScreen) repaint else null,
 	)
 
-	mosaicComposition.setContent(content)
+	mosaicComposition.setContent {
+		CompositionLocalProvider(
+			LocalRenderMode provides renderMode,
+			LocalRepaint provides repaint,
+		) {
+			content()
+		}
+	}
 
 	mosaicComposition.scope.launch {
 		while (true) {
@@ -109,6 +121,8 @@ internal class MosaicComposition(
 	coroutineContext: CoroutineContext,
 	private val onDraw: (Mosaic) -> Unit,
 	private val terminal: Terminal,
+	/** Whose requests draw a frame, or null when the renderer sends every frame in full anyway. */
+	repaint: Repaint? = null,
 ) : Mosaic,
 	LifecycleOwner {
 	private val externalClock = checkNotNull(coroutineContext[MonotonicFrameClock]) {
@@ -157,6 +171,18 @@ internal class MosaicComposition(
 		scope.launch(Unconfined, start = UNDISPATCHED) {
 			terminal.state.size.collect { size ->
 				state.value = state.value.copy(size = size)
+			}
+		}
+		scope.launch(Unconfined, start = UNDISPATCHED) {
+			// Every resize, even back to the same size, reflows the terminal: draw again so a renderer
+			// which draws in place can redraw everything. Recorded by the terminal ahead of its event
+			// queue, so unlike a ResizeEvent this cannot be dropped.
+			terminal.state.resizes.drop(1).collect { needDraw = true }
+		}
+		if (repaint != null) {
+			scope.launch(Unconfined, start = UNDISPATCHED) {
+				// The renderer reads the count itself; all the composition adds is the frame to read it in.
+				repaint.requests.drop(1).collect { needDraw = true }
 			}
 		}
 	}

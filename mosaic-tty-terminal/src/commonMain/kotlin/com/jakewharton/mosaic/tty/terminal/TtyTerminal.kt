@@ -22,12 +22,12 @@ import com.jakewharton.mosaic.terminal.Terminal
 import com.jakewharton.mosaic.terminal.TerminalVersionEvent
 import com.jakewharton.mosaic.tty.IOException
 import com.jakewharton.mosaic.tty.Tty
+import kotlin.concurrent.Volatile
 import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -60,6 +60,7 @@ private class TtyTerminal(
 		override val focused: StateFlow<Boolean>,
 		override val theme: StateFlow<Terminal.Theme>,
 		override val size: StateFlow<Terminal.Size>,
+		override val resizes: StateFlow<Int>,
 	) : Terminal.State
 
 	class Capabilities(
@@ -92,7 +93,28 @@ public suspend fun Tty.asTerminalIn(
 	scope: CoroutineScope,
 	/** When true, each terminal event will be immediately followed by a matching [DebugEvent]. */
 	emitDebugEvents: Boolean = false,
-): Terminal = asTerminalIn(scope, emitDebugEvents, TtyWriter(write = ::write))
+	/**
+	 * When true, switch to the terminal's alternate screen once ready and back when the terminal is
+	 * closed (also on a shutdown signal), so the run leaves no trace behind.
+	 *
+	 * A terminal without an alternate buffer (the Linux console before v6.7; later kernels have one)
+	 * ignores the switch. Entering then clears its main screen to obtain a drawing area, and leaving
+	 * only asks to switch back, which such a terminal ignores too: the last frame stays on screen with
+	 * the cursor parked where the renderer left it, and whatever runs next continues from there.
+	 * Nothing beyond what entering cleared is ever destroyed on the way out.
+	 *
+	 * Restoring is bounded but best effort: no bounded writer can get a restore sequence through a
+	 * TTY which never becomes writable again (stopped by flow control, a dead PTY). The essential
+	 * sequences are attempted first so that a briefly stuck TTY still ends up usable.
+	 */
+	alternateScreen: Boolean = false,
+): Terminal = asTerminalIn(scope, emitDebugEvents, TtyWriter(write = ::write), alternateScreen = alternateScreen)
+
+@Deprecated("Binary compatibility", level = DeprecationLevel.HIDDEN)
+public suspend fun Tty.asTerminalIn(
+	scope: CoroutineScope,
+	emitDebugEvents: Boolean = false,
+): Terminal = asTerminalIn(scope, emitDebugEvents, alternateScreen = false)
 
 /**
  * Bind a [Terminal] to this TTY for the duration of [block], which also receives an `output`
@@ -106,9 +128,19 @@ public suspend fun Tty.asTerminalIn(
 public suspend fun Tty.withTerminalIn(
 	/** When true, each terminal event will be immediately followed by a matching [DebugEvent]. */
 	emitDebugEvents: Boolean = false,
+	/** When true, run on the terminal's alternate screen; see [asTerminalIn]. */
+	alternateScreen: Boolean = false,
 	block: suspend (terminal: Terminal, output: (String) -> Unit) -> Unit,
 ) {
-	withTerminalIn(DefaultShutdownTimeout, emitDebugEvents, block = block)
+	withTerminalIn(DefaultShutdownTimeout, emitDebugEvents, alternateScreen = alternateScreen, block = block)
+}
+
+@Deprecated("Binary compatibility", level = DeprecationLevel.HIDDEN)
+public suspend fun Tty.withTerminalIn(
+	emitDebugEvents: Boolean = false,
+	block: suspend (terminal: Terminal, output: (String) -> Unit) -> Unit,
+) {
+	withTerminalIn(emitDebugEvents, alternateScreen = false, block = block)
 }
 
 internal suspend fun Tty.withTerminalIn(
@@ -116,13 +148,14 @@ internal suspend fun Tty.withTerminalIn(
 	emitDebugEvents: Boolean,
 	/** Test seam invoked by the reader immediately before each read. */
 	beforeRead: () -> Unit = {},
+	alternateScreen: Boolean = false,
 	block: suspend (terminal: Terminal, output: (String) -> Unit) -> Unit,
 ) {
 	// Own the reader and the finalizer: leave only once both have finished, also when cancelled.
 	// Otherwise the caller could close the TTY underneath a reader which is still winding down.
 	coroutineScope {
 		val writer = TtyWriter(shutdownTimeout, ::write)
-		asTerminalIn(this, emitDebugEvents, writer, beforeRead).use { terminal ->
+		asTerminalIn(this, emitDebugEvents, writer, beforeRead, alternateScreen).use { terminal ->
 			block(terminal) { writer.write(it.encodeToByteArray()) }
 		}
 	}
@@ -133,6 +166,7 @@ private suspend fun Tty.asTerminalIn(
 	emitDebugEvents: Boolean,
 	writer: TtyWriter,
 	beforeRead: () -> Unit = {},
+	alternateScreen: Boolean = false,
 ): Terminal {
 	// Entering raw mode can fail, so perform it before any additional control sequences which change
 	// settings. We also need to be in character mode to query capabilities with control sequences.
@@ -141,6 +175,7 @@ private suspend fun Tty.asTerminalIn(
 	val focused = MutableStateFlow(true)
 	val theme = MutableStateFlow(Terminal.Theme.Unknown)
 	val size = MutableStateFlow(Terminal.Size.Default)
+	val resizes = MutableStateFlow(0)
 
 	val events = Channel<Event>(64, onBufferOverflow = DROP_OLDEST)
 
@@ -148,7 +183,7 @@ private suspend fun Tty.asTerminalIn(
 	// timed read (the bare Escape disambiguation) consumes it as a mere timeout.
 	val stopping = AtomicBoolean(false)
 
-	setCallback(EventParserTtyCallback(focused, size, events, emitDebugEvents))
+	setCallback(EventParserTtyCallback(focused, size, resizes, events, emitDebugEvents))
 
 	/** Write a control sequence as one transaction. Dropped once the TTY is being restored. */
 	fun write(s: String) {
@@ -161,6 +196,7 @@ private suspend fun Tty.asTerminalIn(
 	var toggleFocus = false
 	var toggleInBandResize = false
 	var toggleSystemTheme = false
+	val alternateScreenEntry = AlternateScreenEntry(writer)
 
 	// TODO The design of finalization hook fights us here. We don't need suspension.
 	val interruptJob = scope.launch(Unconfined, start = UNDISPATCHED) {
@@ -168,15 +204,24 @@ private suspend fun Tty.asTerminalIn(
 			hook = {
 				// Let a frame in flight finish, then restore. The writer drops anything that follows.
 				writer.shutdown { emergency ->
-					// Best effort: a failing write (EIO on a vanished PTY) must not skip the rest. In an
-					// emergency the TTY may be stuck, so all sequences together get one short deadline and
-					// nothing here blocks on the TTY.
-					val deadline = TimeSource.Monotonic.markNow() + EmergencyRestoreTimeout
 					try {
-						if (toggleSystemTheme) tryRestore(systemThemeDisable, emergency, deadline)
-						if (toggleInBandResize) tryRestore(inBandResizeDisable, emergency, deadline)
-						if (toggleFocus) tryRestore(focusDisable, emergency, deadline)
-						if (toggleCursor) tryRestore(cursorEnable, emergency, deadline)
+						val sequences = restoreSequences(
+							// Frames bracket their own synchronized output; only one which did not complete (it
+							// failed, or shutdown abandoned it) can leave it enabled.
+							synchronizedOutput = emergency || writer.hadIncompleteWrite,
+							alternateScreen = alternateScreenEntry.needsExit,
+							cursor = toggleCursor,
+							systemTheme = toggleSystemTheme,
+							inBandResize = toggleInBandResize,
+							focus = toggleFocus,
+						)
+						writeRestoreSequences(
+							sequences = sequences,
+							emergency = emergency,
+							budget = EmergencyRestoreTimeout,
+							writeFully = { bytes -> writeFully(bytes) },
+							writeWithin = { bytes, timeoutMillis -> writeWithTimeout(bytes, 0, bytes.size, timeoutMillis) },
+						)
 					} finally {
 						if (emergency) resetImmediately() else reset()
 					}
@@ -376,6 +421,7 @@ private suspend fun Tty.asTerminalIn(
 
 				is ResizeEvent -> {
 					if (inBandResizeEvents) {
+						resizes.value++
 						size.value = Terminal.Size(event.columns, event.rows, event.width, event.height)
 					} else {
 						// TODO Report unsolicited resize events... somewhere.
@@ -435,6 +481,11 @@ private suspend fun Tty.asTerminalIn(
 		write("\r\n")
 	}
 
+	if (alternateScreen) {
+		// Only now, after the bootstrap output, so nothing of it lands on the alternate screen.
+		alternateScreenEntry.enter()
+	}
+
 	if (!inBandResizeEvents) {
 		currentSize().let { (columns, rows) ->
 			size.value = Terminal.Size(columns, rows)
@@ -450,6 +501,7 @@ private suspend fun Tty.asTerminalIn(
 			focused = focused,
 			theme = theme,
 			size = size,
+			resizes = resizes,
 		),
 		capabilities = TtyTerminal.Capabilities(
 			ansiLevel = ansiLevel,
@@ -471,24 +523,88 @@ private suspend fun Tty.asTerminalIn(
 	)
 }
 
+/**
+ * Enters the alternate screen and remembers whether that was attempted.
+ *
+ * The exit is decided by the attempt, not by confirmation that the switch went out: the TTY may
+ * accept the switch bytes and the writer then stall before it can report so, and a shutdown which
+ * gives up waiting would otherwise strand the user on the alternate screen. A speculative exit on a
+ * terminal which never switched is harmless, since the exit no longer clears anything.
+ */
+internal class AlternateScreenEntry(private val writer: TtyWriter) {
+	/** Set before the switch is written, so a restore racing the entry still sends the exit. */
+	@Volatile
+	var attempted = false
+		private set
+
+	/** Set once the switch bytes went out completely; informational only. */
+	@Volatile
+	var confirmed = false
+		private set
+
+	/** Whether the restore must leave the alternate screen. */
+	val needsExit: Boolean get() = attempted
+
+	fun enter() {
+		attempted = true
+		// The switch is a transaction of its own: whatever happens to the clear which follows, the
+		// terminal is on the alternate screen once these bytes went out. The clear is redundant on a
+		// real alternate screen but gives a terminal without one a blank area to draw on.
+		writer.write(alternateScreenEnable.encodeToByteArray()) { confirmed = true }
+		writer.write((clearScreen + cursorHome).encodeToByteArray())
+	}
+}
+
 /** How long all restore sequences together may wait for a stuck TTY in an emergency. */
 private val EmergencyRestoreTimeout = 500.milliseconds
 
 /**
- * Write a restore sequence, ignoring an I/O failure so the remaining restore steps still run. In
- * an [emergency] the write never blocks and whatever the TTY did not accept by [deadline] is
- * dropped, so the total time spent restoring is bounded however many sequences there are.
+ * The sequences which restore the terminal, in the order they must be attempted: first what gets
+ * the user a usable terminal back (frames no longer withheld, the main screen, a cursor), then the
+ * optional cleanup of reporting modes. None of them is destructive.
  */
-private fun Tty.tryRestore(s: String, emergency: Boolean, deadline: TimeMark) {
-	try {
-		val bytes = s.encodeToByteArray()
-		if (!emergency) {
-			writeFully(bytes)
-			return
+internal fun restoreSequences(
+	synchronizedOutput: Boolean,
+	alternateScreen: Boolean,
+	cursor: Boolean,
+	systemTheme: Boolean,
+	inBandResize: Boolean,
+	focus: Boolean,
+): List<String> = buildList {
+	if (synchronizedOutput) add(synchronizedOutputDisable)
+	if (alternateScreen) add(alternateScreenDisable)
+	if (cursor) add(cursorEnable)
+	if (systemTheme) add(systemThemeDisable)
+	if (inBandResize) add(inBandResizeDisable)
+	if (focus) add(focusDisable)
+}
+
+/**
+ * Write [sequences] in order, each ignoring an I/O failure so the remaining ones still run. In an
+ * [emergency] nothing blocks on the TTY: every sequence gets whatever is left of one shared
+ * [budget], via [writeWithin], and whatever the TTY did not accept by then is dropped. That is why
+ * the essential sequences come first, and why a TTY which never becomes writable again cannot be
+ * restored by anyone: [writeWithin] may then accept part of a sequence, or nothing at all.
+ */
+internal fun writeRestoreSequences(
+	sequences: List<String>,
+	emergency: Boolean,
+	budget: Duration,
+	writeFully: (bytes: ByteArray) -> Unit,
+	writeWithin: (bytes: ByteArray, timeoutMillis: Int) -> Int,
+) {
+	val deadline = TimeSource.Monotonic.markNow() + budget
+	for (sequence in sequences) {
+		try {
+			val bytes = sequence.encodeToByteArray()
+			if (!emergency) {
+				writeFully(bytes)
+				continue
+			}
+			val remaining = -deadline.elapsedNow() // Negative until the deadline, so negate.
+			writeWithin(bytes, remaining.inWholeMilliseconds.coerceAtLeast(0).toInt())
+		} catch (_: IOException) {
 		}
-		val remaining = -deadline.elapsedNow() // Negative until the deadline, so negate.
-		writeWithTimeout(bytes, 0, bytes.size, remaining.inWholeMilliseconds.coerceAtLeast(0).toInt())
-	} catch (_: IOException) {
 	}
 }
 

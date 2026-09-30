@@ -18,30 +18,55 @@ public fun runMosaicMain(
 
 public fun runMosaicBlocking(
 	onNonInteractive: NonInteractivePolicy = Exit,
+	renderMode: RenderMode = RenderMode.Inline,
 	content: @Composable () -> Unit,
 ): Boolean {
 	return runBlocking {
-		runMosaic(onNonInteractive, content)
+		runMosaic(onNonInteractive, renderMode, content)
 	}
 }
 
+@Deprecated("Binary compatibility", level = DeprecationLevel.HIDDEN)
+public fun runMosaicBlocking(
+	onNonInteractive: NonInteractivePolicy = Exit,
+	content: @Composable () -> Unit,
+): Boolean = runMosaicBlocking(onNonInteractive, RenderMode.Inline, content)
+
+public suspend fun runMosaic(
+	onNonInteractive: NonInteractivePolicy = Exit,
+	renderMode: RenderMode = RenderMode.Inline,
+	content: @Composable () -> Unit,
+): Boolean = withTerminal(onNonInteractive, renderMode == RenderMode.FullScreen) { terminal, output ->
+	runMosaic(terminal, output, renderMode, content)
+}
+
+@Deprecated("Binary compatibility", level = DeprecationLevel.HIDDEN)
 public suspend fun runMosaic(
 	onNonInteractive: NonInteractivePolicy = Exit,
 	content: @Composable () -> Unit,
-): Boolean = withTerminal(onNonInteractive) { terminal, output ->
-	runMosaic(terminal, output, content)
-}
+): Boolean = runMosaic(onNonInteractive, RenderMode.Inline, content)
 
 internal suspend fun runMosaic(
 	terminal: Terminal,
 	output: (String) -> Unit,
+	renderMode: RenderMode,
 	content: @Composable () -> Unit,
 ) {
-	val rendering = if (env("MOSAIC_DEBUG_RENDERING") == "true") {
-		DebugRendering(terminal.capabilities)
-	} else {
-		AnsiRendering(terminal.capabilities)
+	val repaint = Repaint()
+	val rendering = when {
+		env("MOSAIC_DEBUG_RENDERING") == "true" -> DebugRendering(terminal.capabilities)
+
+		renderMode == RenderMode.FullScreen -> {
+			FullScreenRendering(
+				capabilities = terminal.capabilities,
+				terminalSize = { terminal.state.size.value },
+				resizeGeneration = { terminal.state.resizes.value },
+				repaintGeneration = { repaint.requests.value },
+			)
+		}
+
+		else -> AnsiRendering(terminal.capabilities)
 	}
 
-	runMosaicComposition(terminal, rendering, output, content)
+	runMosaicComposition(terminal, rendering, output, renderMode, repaint, content)
 }

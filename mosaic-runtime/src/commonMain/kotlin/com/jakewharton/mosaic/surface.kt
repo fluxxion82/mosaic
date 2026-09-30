@@ -67,25 +67,47 @@ internal class TextSurface(
 		}
 	}
 
+	/** The cell at [row], [column], ignoring any translation. */
+	fun cellAt(row: Int, column: Int): TextPixel = cells[row * width + column]
+
+	/** The end (exclusive) of [row] once trailing empty cells are ignored, at most [limit]. */
+	fun trimmedRowEnd(row: Int, limit: Int = width): Int {
+		val rowStart = row * width
+		var rowStop = rowStart + limit
+		while (rowStop > rowStart && cells[rowStop - 1].isEmpty()) {
+			rowStop--
+		}
+		return rowStop - rowStart
+	}
+
 	override fun appendRowTo(appendable: Appendable, row: Int, ansiLevel: AnsiLevel, supportsKittyUnderlines: Boolean) {
+		appendCells(appendable, row, 0, trimmedRowEnd(row), ansiLevel, supportsKittyUnderlines)
+	}
+
+	/**
+	 * Append the cells of [row] from [fromColumn] until [toColumn] (exclusive) with their styles.
+	 * Styles start from a plain state, so the first cell carries all of its attributes, and end with
+	 * a reset when the last cell has any. A wide character whose second half lies outside the range
+	 * is written as a space so that it cannot spill past [toColumn].
+	 */
+	fun appendCells(
+		appendable: Appendable,
+		row: Int,
+		fromColumn: Int,
+		toColumn: Int,
+		ansiLevel: AnsiLevel,
+		supportsKittyUnderlines: Boolean,
+	) {
 		// Reused heap allocation for building ANSI attributes inside the loop.
 		val attributes = mutableListOf<String>()
 
 		val rowStart = row * width
-		var rowStop = rowStart + width
-
-		while (rowStop > rowStart) {
-			val lastIndex = rowStop - 1
-			val pixel = cells[lastIndex]
-			if (pixel.isEmpty()) {
-				rowStop = lastIndex
-			} else {
-				break
-			}
-		}
+		val rowEnd = rowStart + width
+		val start = rowStart + fromColumn
+		val stop = rowStart + toColumn
 
 		var lastPixel = blankPixel
-		for (columnIndex in rowStart until rowStop) {
+		for (columnIndex in start until stop) {
 			val pixel = cells[columnIndex]
 
 			if (ansiLevel != AnsiLevel.NONE) {
@@ -160,9 +182,15 @@ internal class TextSurface(
 			}
 
 			if (pixel.codePoint != WideContinuationCodePoint) {
-				appendable.appendCodePoint(pixel.codePoint)
-				pixel.combining?.let(appendable::append)
-			} else if (columnIndex == rowStart || lastPixel.codePoint == WideContinuationCodePoint) {
+				val next = columnIndex + 1
+				if (next < rowEnd && next >= stop && cells[next].codePoint == WideContinuationCodePoint) {
+					// Only the first half of this wide character is inside the range.
+					appendable.append(' ')
+				} else {
+					appendable.appendCodePoint(pixel.codePoint)
+					pixel.combining?.let(appendable::append)
+				}
+			} else if (columnIndex == start || lastPixel.codePoint == WideContinuationCodePoint) {
 				// A continuation without its wide character would shift the rest of the row left.
 				appendable.append(' ')
 			}
@@ -273,6 +301,18 @@ internal class TextPixel(codePoint: Int) {
 	var underlineStyle: UnderlineStyle = UnderlineStyle.Unspecified
 	var underlineColor: Color = Color.Unspecified
 	var link: String? = null
+
+	/** Whether this cell would render exactly like [other]. */
+	fun contentEquals(other: TextPixel): Boolean {
+		return codePoint == other.codePoint &&
+			combining == other.combining &&
+			background == other.background &&
+			foreground == other.foreground &&
+			textStyle == other.textStyle &&
+			underlineStyle == other.underlineStyle &&
+			underlineColor == other.underlineColor &&
+			link == other.link
+	}
 
 	fun isEmpty(): Boolean {
 		return codePoint == SpaceCharCodePoint &&
