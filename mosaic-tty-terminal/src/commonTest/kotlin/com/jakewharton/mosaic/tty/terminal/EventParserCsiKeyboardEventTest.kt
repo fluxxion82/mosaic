@@ -20,6 +20,14 @@ import com.jakewharton.mosaic.terminal.KeyboardEvent.Companion.Right
 import com.jakewharton.mosaic.terminal.KeyboardEvent.Companion.Up
 import com.jakewharton.mosaic.terminal.UnknownEvent
 import kotlin.test.Test
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 
 class EventParserCsiKeyboardEventTest : BaseEventParserTest() {
 	@Test fun up() {
@@ -55,6 +63,56 @@ class EventParserCsiKeyboardEventTest : BaseEventParserTest() {
 	@Test fun home() {
 		testTerminal.write("${CSI}H")
 		assertThat(parser.next()).isEqualTo(KeyboardEvent(Home))
+	}
+
+	@Test fun shiftTab() {
+		// Back-tab: what a terminal without the Kitty protocol sends for Shift+Tab.
+		testTerminal.write("${CSI}Z")
+		assertThat(parser.next()).isEqualTo(KeyboardEvent(0x09, modifiers = ModifierShift))
+	}
+
+	@Test fun shiftTabMatchesTheKittyEncoding() {
+		testTerminal.write("${CSI}Z${CSI}9;2u")
+		val legacy = parser.next()
+		val kitty = parser.next()
+		assertThat(kitty).isEqualTo(KeyboardEvent(0x09, modifiers = ModifierShift))
+		assertThat(legacy).isEqualTo(kitty)
+	}
+
+	@Test fun shiftTabWithModifiersKeepsShift() {
+		// The modifier parameter may spell shift out or leave it to the final byte; either way it is set.
+		testTerminal.write("${CSI}1;6Z${CSI}1;5Z")
+		assertThat(parser.next()).isEqualTo(KeyboardEvent(0x09, modifiers = ModifierShift or ModifierCtrl))
+		assertThat(parser.next()).isEqualTo(KeyboardEvent(0x09, modifiers = ModifierShift or ModifierCtrl))
+	}
+
+	@Test fun shiftTabFollowedByMoreInputEndsAtTheZ() {
+		testTerminal.write("${CSI}ZA")
+		assertThat(parser.next()).isEqualTo(KeyboardEvent(0x09, modifiers = ModifierShift))
+		assertThat(parser.next()).isEqualTo(KeyboardEvent('A'.code))
+	}
+
+	@Test fun shiftTabNon1p0() {
+		testTerminal.write("${CSI}2;2Z")
+		assertThat(parser.next()).isEqualTo(
+			UnknownEvent("1b5b323b325a".hexToByteArray()),
+		)
+	}
+
+	@Test fun shiftTabSplitAcrossReads() = runBlocking {
+		withTimeout(30.seconds) {
+			try {
+				// Only the introducer arrives at first: the parser must wait for the final byte.
+				testTerminal.write(CSI)
+				val event = async(Dispatchers.IO) { parser.next() }
+				delay(100.milliseconds)
+				testTerminal.write("Z")
+				assertThat(event.await()).isEqualTo(KeyboardEvent(0x09, modifiers = ModifierShift))
+			} finally {
+				// Never leave the reader blocked when an assertion or the timeout cuts the test short.
+				testTerminal.interruptTtyRead()
+			}
+		}
 	}
 
 	@Test fun modifierShiftUp() {
