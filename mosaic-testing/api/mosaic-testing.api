@@ -64,6 +64,8 @@ public final class com/jakewharton/mosaic/testing/TestTerminal$State : com/jakew
 	public fun <init> ()V
 	public fun getFocused ()Lkotlinx/coroutines/flow/MutableStateFlow;
 	public synthetic fun getFocused ()Lkotlinx/coroutines/flow/StateFlow;
+	public fun getResizes ()Lkotlinx/coroutines/flow/MutableStateFlow;
+	public synthetic fun getResizes ()Lkotlinx/coroutines/flow/StateFlow;
 	public fun getSize ()Lkotlinx/coroutines/flow/MutableStateFlow;
 	public synthetic fun getSize ()Lkotlinx/coroutines/flow/StateFlow;
 	public fun getTheme ()Lkotlinx/coroutines/flow/MutableStateFlow;

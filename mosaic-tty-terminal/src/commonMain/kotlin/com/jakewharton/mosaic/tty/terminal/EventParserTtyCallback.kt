@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 internal class EventParserTtyCallback(
 	private val focused: MutableStateFlow<Boolean>,
 	private val size: MutableStateFlow<Terminal.Size>,
+	private val resizes: MutableStateFlow<Int>,
 	private val events: SendChannel<Event>,
 	private val emitDebugEvents: Boolean,
 ) : Tty.Callback {
@@ -29,6 +30,8 @@ internal class EventParserTtyCallback(
 	}
 
 	override fun onResize(columns: Int, rows: Int, width: Int, height: Int) {
+		// Recorded first: the event queue below may drop the event, the size may not even change.
+		resizes.value++
 		size.value = Terminal.Size(columns, rows, width, height)
 		sendEvent(ResizeEvent(columns, rows, width, height))
 	}

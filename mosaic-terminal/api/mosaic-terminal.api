@@ -322,6 +322,7 @@ public final class com/jakewharton/mosaic/terminal/Terminal$Size$Companion {
 
 public abstract interface class com/jakewharton/mosaic/terminal/Terminal$State {
 	public abstract fun getFocused ()Lkotlinx/coroutines/flow/StateFlow;
+	public fun getResizes ()Lkotlinx/coroutines/flow/StateFlow;
 	public abstract fun getSize ()Lkotlinx/coroutines/flow/StateFlow;
 	public abstract fun getTheme ()Lkotlinx/coroutines/flow/StateFlow;
 }
