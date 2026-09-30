@@ -49,6 +49,15 @@ kotlin {
 				implementation libs.assertk
 			}
 		}
+		ttyTest {
+			dependsOn(commonTest)
+		}
+		jvmTest {
+			dependsOn(ttyTest)
+		}
+		nativeTest {
+			dependsOn(ttyTest)
+		}
 	}
 
 	compilerOptions.freeCompilerArgs.add('-Xexpect-actual-classes')

@@ -37,6 +37,8 @@ public actual class TestTerminal private constructor(
 	}
 
 	public actual fun writeTty(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
+		if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 		buffer.asUByteArray().usePinned {
 			mosaic_test_write_tty(ptr, it.addressOf(offset), count).useContents {
 				if (error == 0U) {
@@ -48,6 +50,8 @@ public actual class TestTerminal private constructor(
 	}
 
 	public actual fun readTty(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
+		if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 		buffer.asUByteArray().usePinned {
 			mosaic_test_read_tty(ptr, it.addressOf(offset), count).useContents {
 				if (error == 0U) {
@@ -59,6 +63,8 @@ public actual class TestTerminal private constructor(
 	}
 
 	public actual fun readTtyWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
+		if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 		buffer.asUByteArray().usePinned {
 			mosaic_test_read_tty_with_timeout(ptr, it.addressOf(offset), count, timeoutMillis).useContents {
 				if (error == 0U) {
@@ -77,6 +83,8 @@ public actual class TestTerminal private constructor(
 	}
 
 	public actual fun writeStandardInput(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
+		if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 		buffer.asUByteArray().usePinned {
 			mosaic_test_write_input(ptr, it.addressOf(offset), count).useContents {
 				if (error == 0U) {
@@ -88,6 +96,8 @@ public actual class TestTerminal private constructor(
 	}
 
 	public actual fun readStandardOutput(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
+		if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 		buffer.asUByteArray().usePinned {
 			mosaic_test_read_output(ptr, it.addressOf(offset), count).useContents {
 				if (error == 0U) {
@@ -99,6 +109,8 @@ public actual class TestTerminal private constructor(
 	}
 
 	public actual fun readStandardOutputWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
+		if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 		buffer.asUByteArray().usePinned {
 			mosaic_test_read_output_with_timeout(ptr, it.addressOf(offset), count, timeoutMillis).useContents {
 				if (error == 0U) {
@@ -117,6 +129,8 @@ public actual class TestTerminal private constructor(
 	}
 
 	public actual fun readStandardError(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
+		if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 		buffer.asUByteArray().usePinned {
 			mosaic_test_read_error(ptr, it.addressOf(offset), count).useContents {
 				if (error == 0U) {
@@ -128,6 +142,8 @@ public actual class TestTerminal private constructor(
 	}
 
 	public actual fun readStandardErrorWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
+		if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 		buffer.asUByteArray().usePinned {
 			mosaic_test_read_error_with_timeout(ptr, it.addressOf(offset), count, timeoutMillis).useContents {
 				if (error == 0U) {

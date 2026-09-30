@@ -7,7 +7,54 @@ import kotlin.test.Test
 
 class TtyTerminalCursorTest {
 	@Test fun noReply() = terminalTest {
+		// Like the Linux console, which answers DA1 and DSR but not DECRQM.
+		expect("${CSI}0c", reply = "$CSI?6c")
+		expect("${CSI}5n", reply = "${CSI}0n")
+
+		val teardown = withTerminal { setup ->
+			// Support was never reported.
+			assertThat(capabilities.cursorVisibility).isFalse()
+
+			// Cursor hidden anyway, since terminals ignore DEC private modes they do not recognize.
+			assertThat(setup).contains("$CSI?25l")
+		}
+
+		// Cursor visibility restored.
+		assertThat(teardown).contains("$CSI?25h")
+	}
+
+	@Test fun vt100() = terminalTest {
+		// VT100 terminals skip the capability queries entirely.
+		expect("${CSI}0c", reply = "$CSI?1c")
+
+		val teardown = withTerminal { setup ->
+			assertThat(capabilities.cursorVisibility).isFalse()
+
+			// Cursor hidden anyway.
+			assertThat(setup).contains("$CSI?25l")
+		}
+
+		// Cursor visibility restored.
+		assertThat(teardown).contains("$CSI?25h")
+	}
+
+	@Test fun bootstrapTimeout() = terminalTest {
+		// No replies at all, so startup gives up after its timeout.
+		val teardown = withTerminal { setup ->
+			assertThat(capabilities.cursorVisibility).isFalse()
+
+			// Cursor hidden anyway.
+			assertThat(setup).contains("$CSI?25l")
+		}
+
+		// Cursor visibility restored.
+		assertThat(teardown).contains("$CSI?25h")
+	}
+
+	@Test fun replyNotRecognized() = terminalTest {
 		expect("${CSI}0c", reply = "$CSI?62;22c")
+		// Cursor mode is explicitly not recognized.
+		expect("$CSI?25\$p", reply = "$CSI?25;0\$y")
 		expect("${CSI}5n", reply = "${CSI}0n")
 
 		val teardown = withTerminal { setup ->

@@ -416,7 +416,7 @@ Java_com_jakewharton_mosaic_tty_Jni_streamsFree(
 }
 
 typedef struct MosaicJniTtyCallback {
-	JNIEnv *env;
+	JavaVM *vm;
 	jobject instance;
 	jmethodID onFocus;
 	jmethodID onKey;
@@ -424,38 +424,71 @@ typedef struct MosaicJniTtyCallback {
 	jmethodID onResize;
 } MosaicJniTtyCallback;
 
+static JNIEnv *mosaic_jni_tty_callback_env(MosaicJniTtyCallback *callback, bool *attached) {
+	JNIEnv *env;
+	*attached = false;
+	int result = (*callback->vm)->GetEnv(callback->vm, (void **) &env, JNI_VERSION_1_6);
+	if (result == JNI_EDETACHED) {
+		if ((*callback->vm)->AttachCurrentThread(callback->vm, (void **) &env, NULL) != JNI_OK) {
+			return NULL;
+		}
+		*attached = true;
+		return env;
+	}
+	return result == JNI_OK ? env : NULL;
+}
+
+static void mosaic_jni_tty_callback_finish(MosaicJniTtyCallback *callback, bool attached) {
+	if (attached) (*callback->vm)->DetachCurrentThread(callback->vm);
+}
+
 static void invokeOnFocusCallback(void *opaque, bool focused) {
 	MosaicJniTtyCallback *callback = (MosaicJniTtyCallback *) opaque;
-	(*callback->env)->CallVoidMethod(
-		callback->env,
+	bool attached;
+	JNIEnv *env = mosaic_jni_tty_callback_env(callback, &attached);
+	if (!env) return;
+	(*env)->CallVoidMethod(
+		env,
 		callback->instance,
 		callback->onFocus,
 		focused
 	);
+	mosaic_jni_tty_callback_finish(callback, attached);
 }
 
 static void invokeOnKeyCallback(void *opaque) {
 	MosaicJniTtyCallback *callback = (MosaicJniTtyCallback *) opaque;
-	(*callback->env)->CallVoidMethod(
-		callback->env,
+	bool attached;
+	JNIEnv *env = mosaic_jni_tty_callback_env(callback, &attached);
+	if (!env) return;
+	(*env)->CallVoidMethod(
+		env,
 		callback->instance,
 		callback->onKey
 	);
+	mosaic_jni_tty_callback_finish(callback, attached);
 }
 
 static void invokeOnMouseCallback(void *opaque) {
 	MosaicJniTtyCallback *callback = (MosaicJniTtyCallback *) opaque;
-	(*callback->env)->CallVoidMethod(
-		callback->env,
+	bool attached;
+	JNIEnv *env = mosaic_jni_tty_callback_env(callback, &attached);
+	if (!env) return;
+	(*env)->CallVoidMethod(
+		env,
 		callback->instance,
 		callback->onMouse
 	);
+	mosaic_jni_tty_callback_finish(callback, attached);
 }
 
 static void invokeOnResizeCallback(void *opaque, int columns, int rows, int width, int height) {
 	MosaicJniTtyCallback *callback = (MosaicJniTtyCallback *) opaque;
-	(*callback->env)->CallVoidMethod(
-		callback->env,
+	bool attached;
+	JNIEnv *env = mosaic_jni_tty_callback_env(callback, &attached);
+	if (!env) return;
+	(*env)->CallVoidMethod(
+		env,
 		callback->instance,
 		callback->onResize,
 		columns,
@@ -463,6 +496,7 @@ static void invokeOnResizeCallback(void *opaque, int columns, int rows, int widt
 		width,
 		height
 	);
+	mosaic_jni_tty_callback_finish(callback, attached);
 }
 
 JNIEXPORT jlong JNICALL
@@ -500,7 +534,10 @@ Java_com_jakewharton_mosaic_tty_Jni_ttyCallbackInit(
 	if (unlikely(!jniCallback)) {
 		return 0;
 	}
-	jniCallback->env = env;
+	if ((*env)->GetJavaVM(env, &jniCallback->vm) != JNI_OK) {
+		free(jniCallback);
+		return 0;
+	}
 	jniCallback->instance = globalInstance;
 	jniCallback->onFocus = onFocus;
 	jniCallback->onKey = onKey;
@@ -675,6 +712,49 @@ Java_com_jakewharton_mosaic_tty_Jni_ttyWrite(
 	throwIoe(env, result.error);
 	return -1;
 }
+
+#if !defined(_WIN32)
+JNIEXPORT jint JNICALL
+Java_com_jakewharton_mosaic_tty_Jni_ttyWriteWithTimeout(
+	JNIEnv *env,
+	jclass type UNUSED,
+	jlong ttyOpaque,
+	jbyteArray buffer,
+	jint offset,
+	jint count,
+	jint timeoutMillis
+) {
+	jbyte *bufferElements = (*env)->GetByteArrayElements(env, buffer, NULL);
+	jbyte *bufferElementsAtOffset = bufferElements + offset;
+	// Reinterpret JVM signed bytes as unsigned.
+	uint8_t *nativeBufferAtOffset = (uint8_t *) bufferElementsAtOffset;
+
+	MosaicTty *tty = (MosaicTty *) ttyOpaque;
+	MosaicIoResult result = mosaic_tty_write_with_timeout(tty, nativeBufferAtOffset, count, timeoutMillis);
+
+	(*env)->ReleaseByteArrayElements(env, buffer, bufferElements, 0);
+
+	if (likely(!result.error)) {
+		return result.count;
+	}
+
+	throwIoe(env, result.error);
+	return -1;
+}
+
+JNIEXPORT void JNICALL
+Java_com_jakewharton_mosaic_tty_Jni_ttyResetImmediately(
+	JNIEnv *env,
+	jclass type UNUSED,
+	jlong ttyOpaque
+) {
+	MosaicTty *tty = (MosaicTty *) ttyOpaque;
+	uint32_t error = mosaic_tty_reset_immediately(tty);
+	if (unlikely(error)) {
+		throwIoe(env, error);
+	}
+}
+#endif
 
 JNIEXPORT void JNICALL
 Java_com_jakewharton_mosaic_tty_Jni_ttyEnableRawMode(

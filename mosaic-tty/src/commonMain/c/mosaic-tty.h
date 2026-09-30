@@ -45,12 +45,20 @@ MOSAIC_EXPORT MosaicIoResult mosaic_tty_read_with_timeout(MosaicTty *tty, uint8_
 MOSAIC_EXPORT uint32_t mosaic_tty_interrupt_read(MosaicTty *tty);
 
 MOSAIC_EXPORT MosaicIoResult mosaic_tty_write(MosaicTty *tty, uint8_t *buffer, int count);
+// POSIX only: writes what the TTY accepts within timeoutMillis without blocking; the count may be partial or 0.
+MOSAIC_EXPORT MosaicIoResult mosaic_tty_write_with_timeout(MosaicTty *tty, uint8_t *buffer, int count, int timeoutMillis);
 
 MOSAIC_EXPORT uint32_t mosaic_tty_enable_raw_mode(MosaicTty *tty);
 MOSAIC_EXPORT uint32_t mosaic_tty_enable_window_resize_events(MosaicTty *tty);
+// POSIX only: SIGINT and SIGTERM interrupt a pending read instead of terminating the process.
+MOSAIC_EXPORT uint32_t mosaic_tty_enable_shutdown_signal_interrupt(MosaicTty *tty);
+// POSIX only: the last signal recorded by mosaic_tty_enable_shutdown_signal_interrupt, or 0.
+MOSAIC_EXPORT int mosaic_tty_shutdown_signal(MosaicTty *tty);
 MOSAIC_EXPORT MosaicTtyTerminalSizeResult mosaic_tty_current_terminal_size(MosaicTty *tty);
 
 MOSAIC_EXPORT uint32_t mosaic_tty_reset(MosaicTty *tty);
+// POSIX only: like mosaic_tty_reset, but applies the terminal settings without waiting for pending output.
+MOSAIC_EXPORT uint32_t mosaic_tty_reset_immediately(MosaicTty *tty);
 MOSAIC_EXPORT uint32_t mosaic_tty_free(MosaicTty *tty);
 
 #endif // MOSAIC_TTY_H

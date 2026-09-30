@@ -102,10 +102,7 @@ MosaicIoResult mosaic_streams_read_input(MosaicStreams *streams, uint8_t *buffer
 }
 
 MosaicIoResult mosaic_streams_read_input_with_timeout(MosaicStreams *streams, uint8_t *buffer, int count, int timeoutMillis) {
-	struct timeval timeout;
-	timeout.tv_sec = 0;
-	timeout.tv_usec = timeoutMillis * 1000;
-
+	struct timeval timeout = mosaic_utils_timeval_from_millis(timeoutMillis);
 	return mosaic_utils_read(streams->stdin, streams->interrupt_stdin_reader, buffer, count, &timeout);
 }
 
@@ -308,10 +305,7 @@ MosaicIoResult mosaic_streams_read_intercepted_output(MosaicStreams *streams, ui
 }
 
 MosaicIoResult mosaic_streams_read_intercepted_output_with_timeout(MosaicStreams *streams, uint8_t *buffer, int count, int timeoutMillis) {
-	struct timeval timeout;
-	timeout.tv_sec = 0;
-	timeout.tv_usec = timeoutMillis * 1000;
-
+	struct timeval timeout = mosaic_utils_timeval_from_millis(timeoutMillis);
 	return mosaic_utils_read(
 		streams->intercepted_stdout_reader,
 		streams->interrupt_intercepted_stdout_reader,
@@ -338,10 +332,7 @@ MosaicIoResult mosaic_streams_read_intercepted_error(MosaicStreams *streams, uin
 }
 
 MosaicIoResult mosaic_streams_read_intercepted_error_with_timeout(MosaicStreams *streams, uint8_t *buffer, int count, int timeoutMillis) {
-	struct timeval timeout;
-	timeout.tv_sec = 0;
-	timeout.tv_usec = timeoutMillis * 1000;
-
+	struct timeval timeout = mosaic_utils_timeval_from_millis(timeoutMillis);
 	return mosaic_utils_read(
 		streams->intercepted_stderr_reader,
 		streams->interrupt_intercepted_stderr_reader,

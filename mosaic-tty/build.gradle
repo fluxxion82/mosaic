@@ -52,6 +52,18 @@ jextract.libraries.register('mosaic') {
 }
 
 kotlin {
+	// Linux and macOS share the POSIX signal handling which Windows lacks.
+	applyDefaultHierarchyTemplate {
+		it.common {
+			it.group("native") {
+				it.group("posix") {
+					it.group("linux") {}
+					it.group("macos") {}
+				}
+			}
+		}
+	}
+
 	explicitApi()
 
 	sourceSets {

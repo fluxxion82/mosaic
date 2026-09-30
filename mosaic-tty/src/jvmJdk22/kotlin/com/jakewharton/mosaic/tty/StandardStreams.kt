@@ -78,6 +78,7 @@ public class StandardStreams internal constructor(
 
 	@Throws(IOException::class)
 	public fun readInput(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		Arena.ofConfined().use { arena ->
 			val segment = arena.allocate(count.toLong())
 			val result = mosaic_streams_read_input(arena, ptr, segment, count)
@@ -93,6 +94,7 @@ public class StandardStreams internal constructor(
 
 	@Throws(IOException::class)
 	public fun readInputWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
 		Arena.ofConfined().use { arena ->
 			val segment = arena.allocate(count.toLong())
 			val result = mosaic_streams_read_input_with_timeout(arena, ptr, segment, count, timeoutMillis)
@@ -115,6 +117,7 @@ public class StandardStreams internal constructor(
 
 	@Throws(IOException::class)
 	public fun writeOutput(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		Arena.ofConfined().use { arena ->
 			val segment = arena.allocate(count.toLong())
 			MemorySegment.copy(buffer, offset, segment, ValueLayout.JAVA_BYTE, 0, count)
@@ -129,6 +132,7 @@ public class StandardStreams internal constructor(
 
 	@Throws(IOException::class)
 	public fun writeError(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		Arena.ofConfined().use { arena ->
 			val segment = arena.allocate(count.toLong())
 			MemorySegment.copy(buffer, offset, segment, ValueLayout.JAVA_BYTE, 0, count)
@@ -174,6 +178,7 @@ public class StandardStreams internal constructor(
 	) : AutoCloseable {
 		@Throws(IOException::class)
 		public fun readOutput(buffer: ByteArray, offset: Int, count: Int): Int {
+			buffer.checkRange(offset, count)
 			Arena.ofConfined().use { arena ->
 				val segment = arena.allocate(count.toLong())
 				val result = mosaic_streams_read_intercepted_output(arena, ptr, segment, count)
@@ -189,6 +194,7 @@ public class StandardStreams internal constructor(
 
 		@Throws(IOException::class)
 		public fun readOutputWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+			buffer.checkRange(offset, count)
 			Arena.ofConfined().use { arena ->
 				val segment = arena.allocate(count.toLong())
 				val result = mosaic_streams_read_intercepted_output_with_timeout(arena, ptr, segment, count, timeoutMillis)
@@ -211,6 +217,7 @@ public class StandardStreams internal constructor(
 
 		@Throws(IOException::class)
 		public fun readError(buffer: ByteArray, offset: Int, count: Int): Int {
+			buffer.checkRange(offset, count)
 			Arena.ofConfined().use { arena ->
 				val segment = arena.allocate(count.toLong())
 				val result = mosaic_streams_read_intercepted_error(arena, ptr, segment, count)
@@ -226,6 +233,7 @@ public class StandardStreams internal constructor(
 
 		@Throws(IOException::class)
 		public fun readErrorWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+			buffer.checkRange(offset, count)
 			Arena.ofConfined().use { arena ->
 				val segment = arena.allocate(count.toLong())
 				val result = mosaic_streams_read_intercepted_error_with_timeout(arena, ptr, segment, count, timeoutMillis)
