@@ -26,3 +26,4 @@ final class com.jakewharton.mosaic.tty.terminal/EventParser { // com.jakewharton
 }
 
 final suspend fun (com.jakewharton.mosaic.tty/Tty).com.jakewharton.mosaic.tty.terminal/asTerminalIn(kotlinx.coroutines/CoroutineScope, kotlin/Boolean = ...): com.jakewharton.mosaic.terminal/Terminal // com.jakewharton.mosaic.tty.terminal/asTerminalIn|asTerminalIn@com.jakewharton.mosaic.tty.Tty(kotlinx.coroutines.CoroutineScope;kotlin.Boolean){}[0]
+final suspend fun (com.jakewharton.mosaic.tty/Tty).com.jakewharton.mosaic.tty.terminal/withTerminalIn(kotlin/Boolean = ..., kotlin.coroutines/SuspendFunction2<com.jakewharton.mosaic.terminal/Terminal, kotlin/Function1<kotlin/String, kotlin/Unit>, kotlin/Unit>) // com.jakewharton.mosaic.tty.terminal/withTerminalIn|withTerminalIn@com.jakewharton.mosaic.tty.Tty(kotlin.Boolean;kotlin.coroutines.SuspendFunction2<com.jakewharton.mosaic.terminal.Terminal,kotlin.Function1<kotlin.String,kotlin.Unit>,kotlin.Unit>){}[0]

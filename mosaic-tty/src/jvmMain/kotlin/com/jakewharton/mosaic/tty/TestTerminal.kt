@@ -28,16 +28,19 @@ public actual class TestTerminal private constructor(
 
 	@Throws(IOException::class)
 	public actual fun writeTty(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		return Jni.testWriteTty(ptr, buffer, offset, count)
 	}
 
 	@Throws(IOException::class)
 	public actual fun readTty(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		return Jni.testReadTty(ptr, buffer, offset, count)
 	}
 
 	@Throws(IOException::class)
 	public actual fun readTtyWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
 		return Jni.testReadTtyWithTimeout(ptr, buffer, offset, count, timeoutMillis)
 	}
 
@@ -48,16 +51,19 @@ public actual class TestTerminal private constructor(
 
 	@Throws(IOException::class)
 	public actual fun writeStandardInput(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		return Jni.testWriteInput(ptr, buffer, offset, count)
 	}
 
 	@Throws(IOException::class)
 	public actual fun readStandardOutput(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		return Jni.testReadOutput(ptr, buffer, offset, count)
 	}
 
 	@Throws(IOException::class)
 	public actual fun readStandardOutputWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
 		return Jni.testReadOutputWithTimeout(ptr, buffer, offset, count, timeoutMillis)
 	}
 
@@ -68,11 +74,13 @@ public actual class TestTerminal private constructor(
 
 	@Throws(IOException::class)
 	public actual fun readStandardError(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		return Jni.testReadError(ptr, buffer, offset, count)
 	}
 
 	@Throws(IOException::class)
 	public actual fun readStandardErrorWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
 		return Jni.testReadErrorWithTimeout(ptr, buffer, offset, count, timeoutMillis)
 	}
 

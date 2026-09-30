@@ -41,6 +41,7 @@ public actual class Tty internal constructor(
 	private var callbackPtrAndRef: Pair<CPointer<MosaicTtyCallback>, StableRef<Callback>>? = null
 
 	public actual fun setCallback(callback: Callback?) {
+		val ptr = ptr ?: return // Closed; the callback was already freed.
 		callbackPtrAndRef?.let { (callbackPtr, callbackRef) ->
 			nativeHeap.free(callbackPtr)
 			callbackRef.dispose()
@@ -59,6 +60,8 @@ public actual class Tty internal constructor(
 	}
 
 	public actual fun read(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
+		if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 		buffer.asUByteArray().usePinned {
 			mosaic_tty_read(ptr, it.addressOf(offset), count).useContents {
 				if (error == 0U) return this.count
@@ -68,6 +71,8 @@ public actual class Tty internal constructor(
 	}
 
 	public actual fun readWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
+		if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 		buffer.asUByteArray().usePinned {
 			mosaic_tty_read_with_timeout(ptr, it.addressOf(offset), count, timeoutMillis).useContents {
 				if (error == 0U) return this.count
@@ -83,11 +88,21 @@ public actual class Tty internal constructor(
 	}
 
 	public actual fun write(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
+		if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
 		buffer.asUByteArray().usePinned {
 			mosaic_tty_write(ptr, it.addressOf(offset), count).useContents {
 				if (error == 0U) return this.count
 				throwIoe(error)
 			}
+		}
+	}
+
+	public actual fun writeWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
+		if (count == 0) return 0 // addressOf() rejects an empty range at the end of the array.
+		buffer.asUByteArray().usePinned {
+			return ttyWriteWithTimeout(ptr, it.addressOf(offset), count, timeoutMillis)
 		}
 	}
 
@@ -103,6 +118,14 @@ public actual class Tty internal constructor(
 		throwIoe(error)
 	}
 
+	public actual fun enableShutdownSignalInterrupt() {
+		val error = ttyEnableShutdownSignalInterrupt(ptr)
+		if (error == 0U) return
+		throwIoe(error)
+	}
+
+	public actual fun shutdownSignal(): Int = ttyShutdownSignal(ptr)
+
 	public actual fun currentSize(): IntArray {
 		mosaic_tty_current_terminal_size(ptr).useContents {
 			if (error == 0U) {
@@ -114,6 +137,10 @@ public actual class Tty internal constructor(
 
 	public actual fun reset() {
 		mosaic_tty_reset(ptr)
+	}
+
+	public actual fun resetImmediately() {
+		ttyResetImmediately(ptr)
 	}
 
 	actual override fun close() {

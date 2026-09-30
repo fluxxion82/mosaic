@@ -235,10 +235,7 @@ MosaicIoResult mosaic_test_read_tty(MosaicTestTty *testTty, uint8_t *buffer, int
 }
 
 MosaicIoResult mosaic_test_read_tty_with_timeout(MosaicTestTty *testTty, uint8_t *buffer, int count, int timeoutMillis) {
-	struct timeval timeout;
-	timeout.tv_sec = 0;
-	timeout.tv_usec = timeoutMillis * 1000;
-
+	struct timeval timeout = mosaic_utils_timeval_from_millis(timeoutMillis);
 	return mosaic_utils_read(testTty->tty_parent_fd, testTty->tty_parent_interrupt_reader_fd, buffer, count, &timeout);
 }
 
@@ -257,10 +254,7 @@ MosaicIoResult mosaic_test_read_output(MosaicTestTty *testTty, uint8_t *buffer, 
 }
 
 MosaicIoResult mosaic_test_read_output_with_timeout(MosaicTestTty *testTty, uint8_t *buffer, int count, int timeoutMillis) {
-	struct timeval timeout;
-	timeout.tv_sec = 0;
-	timeout.tv_usec = timeoutMillis * 1000;
-
+	struct timeval timeout = mosaic_utils_timeval_from_millis(timeoutMillis);
 	return mosaic_utils_read(testTty->stdout_reader_fd, testTty->stdout_interrupt_reader_fd, buffer, count, &timeout);
 }
 
@@ -275,10 +269,7 @@ MosaicIoResult mosaic_test_read_error(MosaicTestTty *testTty, uint8_t *buffer, i
 }
 
 MosaicIoResult mosaic_test_read_error_with_timeout(MosaicTestTty *testTty, uint8_t *buffer, int count, int timeoutMillis) {
-	struct timeval timeout;
-	timeout.tv_sec = 0;
-	timeout.tv_usec = timeoutMillis * 1000;
-
+	struct timeval timeout = mosaic_utils_timeval_from_millis(timeoutMillis);
 	return mosaic_utils_read(testTty->stderr_reader_fd, testTty->stderr_interrupt_reader_fd, buffer, count, &timeout);
 }
 
@@ -294,12 +285,51 @@ uint32_t mosaic_test_resize(MosaicTestTty *testTty, int columns, int rows, int w
 		return sizeResult;
 	}
 
-	// TODO Why can't I reference SIGWINCH here but I can in mosaic-tty-posix.c?
+	// SIGWINCH is hidden by this file's X/Open feature level on macOS.
 	if (unlikely(raise(28))) {
 		return errno;
 	}
 
 	return 0;
+}
+
+static void mosaic_test_sigusr1_handler(int value UNUSED) {
+}
+
+uint32_t mosaic_test_install_sigusr1_handler_without_restart(void) {
+	struct sigaction action;
+	action.sa_handler = mosaic_test_sigusr1_handler;
+	sigemptyset(&action.sa_mask);
+	action.sa_flags = 0;
+	if (likely(sigaction(SIGUSR1, &action, NULL) == 0)) return 0;
+	return errno;
+}
+
+uint32_t mosaic_test_install_shutdown_handler(int signum) {
+	return mosaic_tty_install_shutdown_handler(signum, NULL);
+}
+
+bool mosaic_test_tty_descriptors_are_cloexec(void) {
+	return mosaic_tty_bound_descriptors_are_cloexec();
+}
+
+int mosaic_test_signal_disposition(int signum) {
+	struct sigaction current;
+	if (unlikely(sigaction(signum, NULL, &current) != 0)) {
+		return -1;
+	}
+	if (current.sa_handler == SIG_DFL) return 0;
+	if (current.sa_handler == SIG_IGN) return 1;
+	return 2;
+}
+
+int mosaic_test_write_eintr_retries(void) {
+	return mosaic_utils_write_eintr_retries();
+}
+
+uint32_t mosaic_test_reset_sigusr1_handler(void) {
+	if (likely(signal(SIGUSR1, SIG_DFL) != SIG_ERR)) return 0;
+	return errno;
 }
 
 uint32_t mosaic_test_send_focus_event(MosaicTestTty *testTty UNUSED, bool focused UNUSED) {

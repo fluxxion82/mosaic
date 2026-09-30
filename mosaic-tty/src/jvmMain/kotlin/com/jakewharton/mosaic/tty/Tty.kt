@@ -27,6 +27,7 @@ public actual class Tty internal constructor(
 	private var callbackPtr = 0L
 
 	public actual fun setCallback(callback: Callback?) {
+		if (ptr == 0L) return // Closed; the callback was already freed.
 		val oldCallbackPtr = callbackPtr
 		if (oldCallbackPtr != 0L) {
 			Jni.ttyCallbackFree(oldCallbackPtr)
@@ -48,11 +49,13 @@ public actual class Tty internal constructor(
 
 	@Throws(IOException::class)
 	public actual fun read(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		return Jni.ttyRead(ptr, buffer, offset, count)
 	}
 
 	@Throws(IOException::class)
 	public actual fun readWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
 		return Jni.ttyReadWithTimeout(ptr, buffer, offset, count, timeoutMillis)
 	}
 
@@ -63,7 +66,15 @@ public actual class Tty internal constructor(
 
 	@Throws(IOException::class)
 	public actual fun write(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		return Jni.ttyWrite(ptr, buffer, offset, count)
+	}
+
+	@Throws(IOException::class)
+	public actual fun writeWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
+		if (isWindowsHost) return write(buffer, offset, count)
+		return Jni.ttyWriteWithTimeout(ptr, buffer, offset, count, timeoutMillis)
 	}
 
 	@Throws(IOException::class)
@@ -76,6 +87,13 @@ public actual class Tty internal constructor(
 		Jni.ttyEnableWindowResizeEvents(ptr)
 	}
 
+	/** Does nothing on the JVM, which relies on shutdown hooks instead of signal handlers. */
+	public actual fun enableShutdownSignalInterrupt() {
+	}
+
+	/** Always 0 on the JVM. */
+	public actual fun shutdownSignal(): Int = 0
+
 	@Throws(IOException::class)
 	public actual fun currentSize(): IntArray {
 		return Jni.ttyCurrentSize(ptr)
@@ -84,6 +102,11 @@ public actual class Tty internal constructor(
 	@Throws(IOException::class)
 	public actual fun reset() {
 		Jni.ttyReset(ptr)
+	}
+
+	@Throws(IOException::class)
+	public actual fun resetImmediately() {
+		if (isWindowsHost) reset() else Jni.ttyResetImmediately(ptr)
 	}
 
 	@Throws(IOException::class)

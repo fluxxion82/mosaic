@@ -1,6 +1,7 @@
+@file:OptIn(ExperimentalAtomicApi::class)
+
 package com.jakewharton.mosaic.tty.terminal
 
-import com.jakewharton.finalization.withFinalizationHook
 import com.jakewharton.mosaic.terminal.AnsiLevel
 import com.jakewharton.mosaic.terminal.CapabilityQueryEvent
 import com.jakewharton.mosaic.terminal.CursorPositionEvent
@@ -19,8 +20,15 @@ import com.jakewharton.mosaic.terminal.ResizeEvent
 import com.jakewharton.mosaic.terminal.SystemThemeEvent
 import com.jakewharton.mosaic.terminal.Terminal
 import com.jakewharton.mosaic.terminal.TerminalVersionEvent
+import com.jakewharton.mosaic.tty.IOException
 import com.jakewharton.mosaic.tty.Tty
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart.UNDISPATCHED
@@ -32,6 +40,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -75,10 +84,55 @@ private const val StageCapabilityQueries = 2
 private const val StageDefaultQueries = 1
 private const val StageNormalOperation = 0
 
+/**
+ * Bind a [Terminal] to this TTY. Its reader runs in [scope] until the terminal is closed; wait for
+ * that coroutine to finish before closing this TTY. [withTerminalIn] does both for you.
+ */
 public suspend fun Tty.asTerminalIn(
 	scope: CoroutineScope,
 	/** When true, each terminal event will be immediately followed by a matching [DebugEvent]. */
 	emitDebugEvents: Boolean = false,
+): Terminal = asTerminalIn(scope, emitDebugEvents, TtyWriter(write = ::write))
+
+/**
+ * Bind a [Terminal] to this TTY for the duration of [block], which also receives an `output`
+ * function for writing to the TTY. Its writes are serialized with the terminal's own control
+ * sequences, so each call is written completely or not at all relative to them, and output which
+ * arrives once the terminal has started restoring the TTY is dropped instead of corrupting it.
+ *
+ * The terminal is closed when [block] returns or fails, and this only returns once the terminal's
+ * reader has finished as well, so the TTY may be closed right afterwards.
+ */
+public suspend fun Tty.withTerminalIn(
+	/** When true, each terminal event will be immediately followed by a matching [DebugEvent]. */
+	emitDebugEvents: Boolean = false,
+	block: suspend (terminal: Terminal, output: (String) -> Unit) -> Unit,
+) {
+	withTerminalIn(DefaultShutdownTimeout, emitDebugEvents, block = block)
+}
+
+internal suspend fun Tty.withTerminalIn(
+	shutdownTimeout: Duration,
+	emitDebugEvents: Boolean,
+	/** Test seam invoked by the reader immediately before each read. */
+	beforeRead: () -> Unit = {},
+	block: suspend (terminal: Terminal, output: (String) -> Unit) -> Unit,
+) {
+	// Own the reader and the finalizer: leave only once both have finished, also when cancelled.
+	// Otherwise the caller could close the TTY underneath a reader which is still winding down.
+	coroutineScope {
+		val writer = TtyWriter(shutdownTimeout, ::write)
+		asTerminalIn(this, emitDebugEvents, writer, beforeRead).use { terminal ->
+			block(terminal) { writer.write(it.encodeToByteArray()) }
+		}
+	}
+}
+
+private suspend fun Tty.asTerminalIn(
+	scope: CoroutineScope,
+	emitDebugEvents: Boolean,
+	writer: TtyWriter,
+	beforeRead: () -> Unit = {},
 ): Terminal {
 	// Entering raw mode can fail, so perform it before any additional control sequences which change
 	// settings. We also need to be in character mode to query capabilities with control sequences.
@@ -90,7 +144,16 @@ public suspend fun Tty.asTerminalIn(
 
 	val events = Channel<Event>(64, onBufferOverflow = DROP_OLDEST)
 
+	// Set before the reader is interrupted. The interrupt itself is not a reliable stop signal: a
+	// timed read (the bare Escape disambiguation) consumes it as a mere timeout.
+	val stopping = AtomicBoolean(false)
+
 	setCallback(EventParserTtyCallback(focused, size, events, emitDebugEvents))
+
+	/** Write a control sequence as one transaction. Dropped once the TTY is being restored. */
+	fun write(s: String) {
+		writer.write(s.encodeToByteArray())
+	}
 
 	// Each of these will become true when their respective feature is recognized by the terminal
 	// and was not already configured to our desired setting. Revert each toggled setting on exit.
@@ -101,20 +164,30 @@ public suspend fun Tty.asTerminalIn(
 
 	// TODO The design of finalization hook fights us here. We don't need suspension.
 	val interruptJob = scope.launch(Unconfined, start = UNDISPATCHED) {
-		withFinalizationHook(
+		withTerminalFinalizationHook(
 			hook = {
-				setCallback(null)
-				if (toggleSystemTheme) write(systemThemeDisable)
-				if (toggleInBandResize) write(inBandResizeDisable)
-				if (toggleFocus) write(focusDisable)
-				if (toggleCursor) write(cursorEnable)
-				reset()
+				// Let a frame in flight finish, then restore. The writer drops anything that follows.
+				writer.shutdown { emergency ->
+					// Best effort: a failing write (EIO on a vanished PTY) must not skip the rest. In an
+					// emergency the TTY may be stuck, so all sequences together get one short deadline and
+					// nothing here blocks on the TTY.
+					val deadline = TimeSource.Monotonic.markNow() + EmergencyRestoreTimeout
+					try {
+						if (toggleSystemTheme) tryRestore(systemThemeDisable, emergency, deadline)
+						if (toggleInBandResize) tryRestore(inBandResizeDisable, emergency, deadline)
+						if (toggleFocus) tryRestore(focusDisable, emergency, deadline)
+						if (toggleCursor) tryRestore(cursorEnable, emergency, deadline)
+					} finally {
+						if (emergency) resetImmediately() else reset()
+					}
+				}
 			},
 			block = {
 				try {
 					awaitCancellation()
 				} finally {
 					// When cancelled (from signal or normally), wake up the reader parse loop so it can exit.
+					stopping.store(true)
 					interruptRead()
 				}
 			},
@@ -126,6 +199,7 @@ public suspend fun Tty.asTerminalIn(
 	var stage = StageDeviceAttributes
 
 	var cursorVisibility = false
+	var cursorReported = false
 	var focusEvents = false
 	var inBandResizeEvents = false
 	var kittyGraphics = false
@@ -142,10 +216,13 @@ public suspend fun Tty.asTerminalIn(
 	var themeEvents = false
 
 	val bootstrapDone = CompletableDeferred<Unit>()
-	scope.launch(Dispatchers.IO) {
-		val parser = EventParser(this@asTerminalIn)
+	suspend fun readEvents(parser: EventParser) {
 		while (true) {
-			val event = parser.next() ?: break
+			val event = parser.next()
+			// The terminal is closing, a shutdown signal interrupted the read, or the read was
+			// interrupted; a timed read may have swallowed either interrupt as a timeout and returned
+			// an event instead of null. Whichever it was, stop, so the terminal is closed from here.
+			if (stopping.load() || shutdownSignal() != 0 || event == null) return
 			if (stage != StageNormalOperation && debugBootstrap) {
 				write("$event\r\n")
 			}
@@ -184,6 +261,7 @@ public suspend fun Tty.asTerminalIn(
 
 					when (event.mode) {
 						cursorMode -> {
+							cursorReported = true
 							cursorVisibility = event.setting.canBeChanged
 							if (event.setting == Setting.Set) {
 								toggleCursor = true
@@ -323,6 +401,20 @@ public suspend fun Tty.asTerminalIn(
 		}
 	}
 
+	scope.launch(Dispatchers.IO) {
+		val parser = EventParser(this@asTerminalIn, beforeRead)
+		try {
+			readEvents(parser)
+		} finally {
+			// This thread is the only one which invokes the callback, so only it may free it.
+			setCallback(null)
+			// Whatever stopped the reader (an interrupt, a shutdown signal, EOF, an error), close the
+			// terminal so the TTY is restored from this ordinary thread. After a shutdown signal the
+			// hook then redelivers it, so this never returns in that case.
+			interruptJob.cancel()
+		}
+	}
+
 	// Spend at most 1 second bootstrapping capabilities and defaults. In theory, there could
 	// exist a terminal which does not respond to DA1 or DSR. Does that terminal actually work?
 	// Who knows, but we don't want to hang forever waiting. Take whatever we got so far
@@ -331,6 +423,13 @@ public suspend fun Tty.asTerminalIn(
 		bootstrapDone.await()
 	}
 	stage = StageNormalOperation
+
+	if (!cursorReported) {
+		// Some terminals (such as the Linux console) support hiding the cursor but do not answer the
+		// mode query. Terminals ignore DEC private modes they do not recognize, so hide it anyway.
+		toggleCursor = true
+		write(cursorDisable)
+	}
 
 	if (debugBootstrap) {
 		write("\r\n")
@@ -372,13 +471,24 @@ public suspend fun Tty.asTerminalIn(
 	)
 }
 
-private fun Tty.write(s: String) {
-	val b = s.encodeToByteArray()
-	var offset = 0
-	while (offset < b.size) {
-		val written = write(b, offset, b.size - offset)
-		if (written == -1) throw EofException()
-		offset += written
+/** How long all restore sequences together may wait for a stuck TTY in an emergency. */
+private val EmergencyRestoreTimeout = 500.milliseconds
+
+/**
+ * Write a restore sequence, ignoring an I/O failure so the remaining restore steps still run. In
+ * an [emergency] the write never blocks and whatever the TTY did not accept by [deadline] is
+ * dropped, so the total time spent restoring is bounded however many sequences there are.
+ */
+private fun Tty.tryRestore(s: String, emergency: Boolean, deadline: TimeMark) {
+	try {
+		val bytes = s.encodeToByteArray()
+		if (!emergency) {
+			writeFully(bytes)
+			return
+		}
+		val remaining = -deadline.elapsedNow() // Negative until the deadline, so negate.
+		writeWithTimeout(bytes, 0, bytes.size, remaining.inWholeMilliseconds.coerceAtLeast(0).toInt())
+	} catch (_: IOException) {
 	}
 }
 

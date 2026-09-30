@@ -27,11 +27,13 @@ public actual class StandardStreams internal constructor(
 
 	@Throws(IOException::class)
 	public actual fun readInput(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		return Jni.streamsReadInput(ptr, buffer, offset, count)
 	}
 
 	@Throws(IOException::class)
 	public actual fun readInputWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+		buffer.checkRange(offset, count)
 		return Jni.streamsReadInputWithTimeout(ptr, buffer, offset, count, timeoutMillis)
 	}
 
@@ -42,11 +44,13 @@ public actual class StandardStreams internal constructor(
 
 	@Throws(IOException::class)
 	public actual fun writeOutput(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		return Jni.streamsWriteOutput(ptr, buffer, offset, count)
 	}
 
 	@Throws(IOException::class)
 	public actual fun writeError(buffer: ByteArray, offset: Int, count: Int): Int {
+		buffer.checkRange(offset, count)
 		return Jni.streamsWriteError(ptr, buffer, offset, count)
 	}
 
@@ -70,11 +74,13 @@ public actual class StandardStreams internal constructor(
 	) : AutoCloseable {
 		@Throws(IOException::class)
 		public actual fun readOutput(buffer: ByteArray, offset: Int, count: Int): Int {
+			buffer.checkRange(offset, count)
 			return Jni.streamsReadInterceptedOutput(ptr, buffer, offset, count)
 		}
 
 		@Throws(IOException::class)
 		public actual fun readOutputWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+			buffer.checkRange(offset, count)
 			return Jni.streamsReadInterceptedOutputWithTimeout(ptr, buffer, offset, count, timeoutMillis)
 		}
 
@@ -85,11 +91,13 @@ public actual class StandardStreams internal constructor(
 
 		@Throws(IOException::class)
 		public actual fun readError(buffer: ByteArray, offset: Int, count: Int): Int {
+			buffer.checkRange(offset, count)
 			return Jni.streamsReadInterceptedError(ptr, buffer, offset, count)
 		}
 
 		@Throws(IOException::class)
 		public actual fun readErrorWithTimeout(buffer: ByteArray, offset: Int, count: Int, timeoutMillis: Int): Int {
+			buffer.checkRange(offset, count)
 			return Jni.streamsReadInterceptedErrorWithTimeout(ptr, buffer, offset, count, timeoutMillis)
 		}
 

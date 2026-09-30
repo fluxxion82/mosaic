@@ -9,7 +9,7 @@ import com.jakewharton.mosaic.terminal.AnsiLevel
 import com.jakewharton.mosaic.terminal.Event
 import com.jakewharton.mosaic.terminal.Terminal
 import com.jakewharton.mosaic.tty.Tty
-import com.jakewharton.mosaic.tty.terminal.asTerminalIn
+import com.jakewharton.mosaic.tty.terminal.withTerminalIn
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.coroutineScope
@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 internal suspend fun withTerminal(
 	onNonInteractive: NonInteractivePolicy,
-	block: suspend (Terminal) -> Unit,
+	block: suspend (terminal: Terminal, output: (String) -> Unit) -> Unit,
 ): Boolean = coroutineScope {
 	val tty = if (onNonInteractive != AssumeAndIgnore) {
 		Tty.tryBind()
@@ -34,11 +34,32 @@ internal suspend fun withTerminal(
 	}
 
 	tty.use {
-		val terminal = tty?.asTerminalIn(this) ?: NonInteractiveTerminal
-		terminal.use { block(it) }
+		withTty(tty, block)
 	}
 
 	true
+}
+
+/**
+ * Run [block] with a [Terminal] bound to [tty], or with [NonInteractiveTerminal] if [tty] is null.
+ * The caller retains ownership of [tty].
+ *
+ * The `output` function passed to [block] writes to [tty] so that frames go to the same device
+ * which receives the terminal's control sequences, regardless of where standard output points.
+ * Frames are serialized with those control sequences and dropped once the terminal starts
+ * restoring the TTY. Without a TTY it writes to standard output.
+ */
+internal suspend fun withTty(
+	tty: Tty?,
+	block: suspend (terminal: Terminal, output: (String) -> Unit) -> Unit,
+) {
+	coroutineScope {
+		if (tty != null) {
+			tty.withTerminalIn(block = block)
+		} else {
+			NonInteractiveTerminal.use { block(it, ::print) }
+		}
+	}
 }
 
 /** Behaviors when there is no interactive TTY. */

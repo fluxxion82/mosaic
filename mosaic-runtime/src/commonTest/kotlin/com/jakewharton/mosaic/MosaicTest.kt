@@ -109,6 +109,7 @@ class MosaicTest {
 		runMosaicComposition(
 			rendering = AnsiRendering(terminal.capabilities),
 			terminal = terminal,
+			output = {},
 		) {
 			LaunchedEffect(Unit) {
 				withFrameNanos { frameTimeNanos ->
