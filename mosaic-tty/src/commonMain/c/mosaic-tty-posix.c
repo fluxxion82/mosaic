@@ -170,7 +170,7 @@ uint32_t mosaic_tty_enable_window_resize_events(MosaicTty *tty) {
 	struct sigaction action;
 	action.sa_handler = mosaic_tty_sigwinch_handler;
 	sigemptyset(&action.sa_mask);
-	action.sa_flags = 0;
+	action.sa_flags = SA_RESTART;
 
 	if (likely(sigaction(SIGWINCH, &action, NULL) == 0)) {
 		tty->sigwinch = true;
