@@ -18,4 +18,8 @@ class ArcSplineTest {
 		assertThat(binarySearch(array, 0.3f)).isEqualTo(-3)
 		assertThat(binarySearch(array, 2f)).isEqualTo(-5)
 	}
+
+	@Test fun binarySearchEmpty() {
+		assertThat(binarySearch(FloatArray(0), 1f)).isEqualTo(-1)
+	}
 }
